@@ -54,12 +54,14 @@ raw_philly <- NULL # rm to free memory
 ```
 
 ```{r Pittsburgh}
-raw_pitt <-  read_csv("C:/Users/Matt_2/Downloads/archive-police-blotter.csv")
-raw_pitt <- clean_names(raw_pitt)
+raw_pitt_old <-  read_csv("C:/Users/Matt_2/Downloads/archive-police-blotter.csv")
+raw_pitt_old <- clean_names(raw_pitt_old)
+raw_pitt_new <- read_csv("C:/Users/Matt_2/Downloads/044f2016-1dfd-4ab0-bc1e-065da05fca2e.csv")
+raw_pitt_new <- clean_names(raw_pitt_new)
 
-res2 <- res %>% 
+res <- res %>% 
   rbind(
-    raw_pitt %>% 
+    raw_pitt_old %>% 
       # select(lng = x, lat = y, incident_date = incidenttime,
       #        description = offenses, neighborhood = incidentneighborhood) %>% 
       select(lng = x, lat = y, incident_date = incidenttime,
@@ -76,25 +78,40 @@ res2 <- res %>%
         coords = c("lng", "lat")
         ,crs = "+init=EPSG:4269"
       )
+  ) %>% 
+  rbind(
+    raw_pitt_new %>% 
+      select(lng = x, lat = y, incident_date = incidenttime,
+             description = offenses) %>% 
+      mutate(
+        incident_date = as.Date(incident_date)
+        ,incident_year = as.integer(format(incident_date, "%Y"))
+        ,city = "Pittsburgh"
+      ) %>% 
+      semi_join(yrs_of_interest) %>% 
+      mattle24utils::filter_verbose(lng != 0 & lat != 0) %>% 
+      mattle24utils::drop_na_verbose(lng, lat) %>% 
+      st_as_sf(
+        coords = c("lng", "lat")
+        ,crs = "+init=EPSG:4269"
+      )
+    
   )
 
-raw_pitt <- NULL 
+# hist(res$incident_date[res$city == "Pittsburgh"], breaks = 30)
+
+raw_pitt_old <- NULL 
+raw_pitt_new <- NULL
 ```
 
 ```{r Write Northeast}
-write.csv(res, "data/northeast_incidents.csv")
+saveRDS(res, "data/northeast_incidents.rds")
 ```
 
-
-# Read and Munge Data
 
 ## South
 
-```{r}
-res <- tibble() # init the result tibble (will be written to disk)
-```
-
-```{r Washington DC}
+```{r Washington DC, eval = FALSE}
 # TODO: DC also tags these by Census block and tract
 
 # Return a cleaned dataframe with the fields I want to use for analysis given
@@ -119,90 +136,51 @@ raw_dc_16 <- jsonlite::fromJSON("https://opendata.arcgis.com/datasets/bda2076384
 
 raw_dc_17 <- jsonlite::fromJSON("https://opendata.arcgis.com/datasets/6af5cb8dc38e4bcbac8168b27ee104aa_38.geojson")
 
-raw_dc <- clean_dc(raw_dc_11) %>% 
+res <- clean_dc(raw_dc_11) %>% 
   bind_rows(clean_dc(raw_dc_12)) %>% 
   bind_rows(clean_dc(raw_dc_16)) %>% 
   bind_rows(clean_dc(raw_dc_17)) 
 
-
-res <- res %>% 
-  bind_rows(raw_dc) 
-
-raw_dc <- NULL
 raw_dc_11 <- NULL
 raw_dc_12 <- NULL
 raw_dc_16 <- NULL
 raw_dc_17 <- NULL
 ```
 
-```{r Raleigh}
-raw_raleigh_old <- GET("https://services.arcgis.com/v400IkDOw1ad7Yad/arcgis/rest/services/Police_Incidents_(UCR)/FeatureServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=json")
-
-raleigh_old_json <- fromJSON(content(raw_raleigh_old, "text"), flatten = TRUE)
-
-raw_raleigh_old <- jsonlite::fromJSON("C:/Users/Matt_2/Downloads/Raleigh_Police_Incidents_SRS.geojson")
-raw_raleigh_old <- clean_names(raw_raleigh_old)
-raw_raleigh_new <- jsonlite::fromJSON("https://opendata.arcgis.com/datasets/24c0b37fa9bb4e16ba8bcaa7e806c615_0.geojson")
-raw_raleigh_new <- clean_names(raw_raleigh_new)
-
-x <- read_csv("https://services.arcgis.com/v400IkDOw1ad7Yad/arcgis/rest/services/Police_Incidents_(UCR)/FeatureServer/0/query?outFields=*&where=1%3D1")
-# res <- 
-res %>% 
-  bind_rows(
-    raw_raleigh_old$features$properties %>% 
-      clean_names() %>% 
-      select(incident_date = inc_datetime, description = lcr_desc) %>% 
-      mutate(incident_date = as.Date(incident_date),
-             incident_year = as.integer(format(incident_date, "%Y")),
-             city = "Raleigh") %>% 
-      bind_cols()
-      semi_join(yrs_of_interest) %>% 
-  ) %>% 
-  bind_rows(
-    raw
-  )
-```
-
 ## West
-
-```{r}
-# result results
-res <- NULL
-```
 
 ```{r Los Angeles}
 raw_la <- read_csv("C:/Users/Matt_2/Downloads/Crime_Data_from_2010_to_Present.csv")
 raw_la <- clean_names(raw_la)
 res <- raw_la %>% 
-      select(incident_date = date_occurred, description = crime_code_description, location) %>% 
-      mutate(incident_date = as.Date(incident_date, format = "%m/%d/%Y"),
-             incident_year = as.integer(format(incident_date, "%Y")),
-             city = "Los Angeles"
-             ) %>% 
-      semi_join(yrs_of_interest) %>% 
-      # get geometry (points) from `location`
-      tidyr::extract(
-        col = location
-        ,into = "y"
-        ,regex = "([\\d|\\.]*(?=,))"
-        ,remove = FALSE
-        ,convert = TRUE
-      ) %>% 
-      tidyr::extract(
-        col = location
-        ,into = "x"
-        ,regex = "((?<=, )[-|\\d|\\.]*)"
-        ,remove = FALSE
-        ,convert = TRUE
-      ) %>% 
-      mattle24utils::filter_verbose(x != 0 & y != 0) %>% 
-      st_as_sf(
-        coords = c("x", "y")
-        ,crs = "+init=EPSG:4269"
-      ) %>% 
-      select(-location) %>% 
-      identity()
-  )
+  select(incident_date = date_occurred, description = crime_code_description, location) %>% 
+  mutate(incident_date = as.Date(incident_date, format = "%m/%d/%Y"),
+         incident_year = as.integer(format(incident_date, "%Y")),
+         city = "Los Angeles"
+         ) %>% 
+  semi_join(yrs_of_interest) %>% 
+  # get geometry (points) from `location`
+  tidyr::extract(
+    col = location
+    ,into = "y"
+    ,regex = "([\\d|\\.]*(?=,))"
+    ,remove = FALSE
+    ,convert = TRUE
+  ) %>% 
+  tidyr::extract(
+    col = location
+    ,into = "x"
+    ,regex = "((?<=, )[-|\\d|\\.]*)"
+    ,remove = FALSE
+    ,convert = TRUE
+  ) %>% 
+  mattle24utils::filter_verbose(x != 0 & y != 0) %>% 
+  st_as_sf(
+    coords = c("x", "y")
+    ,crs = "+init=EPSG:4269"
+  ) %>% 
+  select(-location) %>% 
+  identity()
 
 raw_la <- NULL
 ```
@@ -232,11 +210,7 @@ raw_sf <- NULL
 ```
 
 ```{r Write West}
-write_sf(res, "data/west_incidents.shp", overwrite = TRUE)
+saveRDS(res, "data/west_incidents.rds")
 ```
 
-
-```{r}
-x <- read_sf("data/west_incidents.shp")
-```
 
