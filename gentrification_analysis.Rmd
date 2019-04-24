@@ -1,0 +1,192 @@
+---
+title: "Gentrification Analysis"
+author: "Matt Lehman"
+date: "`r format(Sys.time(), '%b %d, %Y')`"
+output:
+  html_document:
+    fig_height: 4
+    theme: yeti
+    highlight: pygments
+    toc: true
+    toc_depth: 3
+    toc_float: true
+---
+
+# Purpose
+
+The purpose of this analysis is to assign gentrification values to city
+neighborhoods using [Freeman's
+(2003)](https://journals.sagepub.com/doi/abs/10.1177/1078087404273341)
+methodsand then to verify that these assigned values are reasonable by compating
+the model output to qualitative accounts.
+
+# Packages and Setup
+
+```{r packages}
+library(janitor)
+library(sf)
+library(dplyr)
+library(readr)
+library(glue)
+library(tibble)
+```
+
+```{r}
+file_path <- "C:/Users/Matt_2/Downloads/nhgis0057_csv/nhgis0057_csv"
+```
+
+
+# Read and Munge Data
+
+## Census Data
+
+Read in 2015, 2010, and 2015 data and munge.
+
+Read in 2015 data and munge 
+
+```{r}
+file_names_2015 <- c("nhgis0057_ds215_20155_2015_cbsa", "nhgis0057_ds215_20155_2015_tract", "nhgis0057_ds216_20155_2015_cbsa", "nhgis0057_ds216_20155_2015_tract")
+```
+
+```{r 2015 msa}
+msa_a_2015 <- read_csv(glue("{file_path}/{file_name}.csv", file_name = file_names_2015[1]))
+msa_a_2015 <- clean_names(msa_a_2015)
+
+msa_clean_a_2015 <- msa_a_2015 %>% 
+  mutate(
+    prop_college_degree = (admze021 + admze022 + admze023 + admze024 + admze025) / admze001
+    # have to estimate 1995 - 2000 since all I have is 1990 - 2000
+    ,prop_housing_built_last_20 = (adqse002 + adqse003 + adqse004 + (adqse005/2)) / adqse001
+  ) %>%
+  select(gisjoin, name = cbsa, year, prop_college_degree, prop_housing_built_last_20,
+         median_house_value = adrwm001) %>% 
+  identity()
+
+msa_b_2015 <- read_csv(glue("{file_path}/{file_name}.csv", file_name = file_names_2015[3]))
+msa_b_2015 <- clean_names(msa_b_2015)
+
+msa_clean_b_2015 <- msa_b_2015 %>% 
+  select(gisjoin, median_family_income = ad4lm001)
+
+msa_2015 <- msa_clean_a_2015 %>% 
+  full_join(msa_clean_b_2015, by = "gisjoin")
+
+msa_a_2015 <- NULL
+msa_clean_a_2015 <- NULL
+msa_b_2015 <- NULL
+msa_clean_b_2015 <- NULL
+
+# filter to MSAs of interest
+# make a tibble for easy reference for city abbr to MSA gisjoin
+city_msa_bridge_2015 <- tibble(
+  gisjoin = c("G41860", "G31080" ,"G37980", "G38300")
+  ,city_abbr = c("sf", "la", "ph", "pi")
+)
+msa_2015 <- msa_2015 %>% 
+  semi_join(city_msa_bridge_2015)
+```
+
+```{r 2015 tracts}
+tracts_2015_a <- read_csv(glue("{file_path}/{file_name}.csv", file_name = file_names_2015[2]))
+tracts_2015_a <- clean_names(tracts_2015_a)
+
+tracts_2015_a_clean <- tracts_2015_a %>% 
+  mutate(
+    prop_college_degree = (admze021 + admze022 + admze023 + admze024 + admze025) / admze001
+    # have to estimate 1995 - 2000 since all I have is 1990 - 2000
+    ,prop_housing_built_last_20 = (adqse002 + adqse003 + adqse004 + (adqse005/2)) / adqse001
+  ) %>%
+  select(gisjoin, name = tracta, year, prop_college_degree, prop_housing_built_last_20,
+         median_house_value = adrwm001) %>% 
+  identity()
+
+tracts_2015_b <- read_csv(glue("{file_path}/{file_name}.csv", file_name = file_names_2015[4]))
+tracts_2015_b <- clean_names(tracts_2015_b)
+
+tracts_2015_b_clean <- tracts_2015_b %>% 
+  select(gisjoin, median_family_income = ad4lm001)
+
+tracts_2015 <- tracts_2015_a_clean %>% 
+  full_join(tracts_2015_b_clean, by = "gisjoin")
+
+tracts_2015_a <- NULL
+tracts_2015_a_clean <- NULL
+tracts_2015_b <- NULL
+tracts_2015_b_clean <- NULL
+```
+
+Read in 2010 data and munge
+
+```{r 2010 msa}
+```
+
+
+```{r 2010 tracts}
+
+```
+
+Read in 2000 data and munge
+
+```{r 2000 msa}
+msa_2000 <- read_csv(glue("{file_path}/nhgis0056_ds151_2000_msa_cmsa.csv"))
+
+```
+
+
+
+## Geospatial data
+
+Read in neighborhoods
+
+```{r read neigborhoods}
+
+```
+
+Read in tracts
+
+```{r read tracts} 
+
+```
+
+
+# Modeling Gentrification
+
+For each city, match tracts to neighborhoods, and filter out tracts that are not in neighborhoods. Weight neighborhood means by tract population times area in neighborhood.
+
+```{r}
+
+```
+
+For each city, join tract data and calculate from Freeman (2003):
+
+
+1.	Have a median income less than the median for that metropolitan area at the beginning of the intercensal period.
+
+  
+2.	Have a proportion of housing built within the past 20 years lower than the proportion found at the median for the respective metropolitan area. 
+
+
+3.	Have a percentage increase in educational attainment greater than the median increase in educational attainment for that metropolitan area. 
+
+
+4.	Have an increase in real housing prices during the intercensal period.
+
+
+```{r}
+# calculate MSA median income
+
+# compare MSA median income to mean neighborhood median in neighborhood
+
+# calculate median proportion of housing built (MPH) within last 20 years in MSA
+
+# calculate mean MPH for neighborhood 
+
+# calculate median percentage increase in educational attainment for tracts in MSA
+
+# compare median percentage increase in educational attainment
+
+# standardize housing prices to correct for inflation and calculate changes in
+# median real housing prices for neighborhoods
+
+```
+
