@@ -213,4 +213,3 @@ raw_sf <- NULL
 saveRDS(res, "data/west_incidents.rds")
 ```
 
-
