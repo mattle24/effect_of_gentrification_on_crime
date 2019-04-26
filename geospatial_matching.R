@@ -38,3 +38,23 @@ tract_to_neighborhood <- function(neighborhoods_sf, state_tracts_sf) {
   }
   return(res)
 }
+
+#' Point to Neighborhood
+#' 
+#' Match points to neighborhoods in a city
+#' @param neighborhoods_sf The `sf` object with neighborhoods
+#' @param points_sf The `sf` object with points
+#' @return A tidy neighborhoods_sf with one row per neighborhood per year with
+#'   columns for number of points in neighborhood per year
+incidents_in_neighborhood <- function(neighborhoods_sf, points_sf) {
+  
+  years <- unique(points_sf$incident_year)
+  
+  for (y in years) {
+    # one row for each neighborhood, one col for each point
+    covers_matrix <- st_contains(neighborhoods_sf, points_sf %>% filter(incident_year == y), sparse = FALSE)
+    neighborhoods_sf[ ,as.character(y)] <- rowSums(covers_matrix)
+  }
+  
+  return(neighborhoods_sf)
+}
