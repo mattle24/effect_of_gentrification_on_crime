@@ -93,7 +93,7 @@ calculate_gentrification <- function(tracts_neighborhoods_2015_sf,
   msa_stats_2010 <- msa_2010 %>% 
     filter(grepl(city_name, name)) %>% 
     select(-(1:2))
-  
+  5
   msa_stats_2000 <- msa_2000 %>% 
     filter(grepl(city_name, name)) %>% 
     select(-(1:2))
@@ -121,6 +121,7 @@ calculate_gentrification <- function(tracts_neighborhoods_2015_sf,
       )
     ) %>%
     ungroup() %>% 
+    mutate(city = city_name) %>% 
     # select(neighborhood, year, gentrifiable, gentrifying) %>% 
     identity()
 }
