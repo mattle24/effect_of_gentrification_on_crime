@@ -1,0 +1,151 @@
+---
+title: "Modeling the Relationship of Gentrification and Crime"
+author: "Matt Lehman"
+date: "`r format(Sys.time(), '%b %d, %Y')`"
+output:
+  html_document:
+    fig_height: 4
+    theme: yeti
+    highlight: pygments
+    toc: true
+    toc_depth: 3
+    toc_float: true
+---
+
+# Packages and Setup
+```{r}
+knitr::opts_chunk$set(dpi=1000,dev="bmp")
+```
+
+```{r}
+library(rstan)
+library(dplyr)
+library(sf)
+library(ggplot2)
+```
+
+
+```{r}
+theme_set(
+  ggthemes::theme_tufte() +
+    theme(panel.border = element_rect(color = "black", fill = NA))
+)
+```
+
+
+```{r rstan setup}
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+Sys.setenv(LOCAL_CPPFLAGS = '-march=native')
+```
+
+
+# Read and Munge Data
+```{r read data}
+la_neighborhood_incident_count <- readRDS("data/la_neighborhood_incident_count.RDS") %>% 
+  mutate(city = "Los Angeles")
+
+philly_neighborhood_incident_count <- readRDS("data/philly_neighborhood_incident_count.RDS") %>% 
+  mutate(city = "Philadelphia")
+
+pitt_neighborhood_incident_count <- readRDS("data/pitt_neighborhood_incident_count.RDS") %>% 
+  mutate(city = "Pittsburgh")
+
+sf_neighborhood_incident_count <- readRDS("data/sf_neighborhood_incident_count.RDS") %>% 
+  mutate(city = "San Francisco")
+
+neighborhood_gentrification <- readRDS("data/neighborhood_gentrification.RDS")
+neighborhood_gentrification <- neighborhood_gentrification %>% 
+  select(city, neighborhood, year, total_pop, gentrifiable, gentrifiable_prior, gentrifying)
+```
+
+Matching gentrification to incident data. 
+
+```{r join data}
+# format incident data
+data <- la_neighborhood_incident_count %>% 
+  bind_rows(philly_neighborhood_incident_count) %>% 
+  bind_rows(pitt_neighborhood_incident_count) %>% 
+  bind_rows(sf_neighborhood_incident_count) %>% 
+  group_by(city, neighborhood) %>% 
+  mutate(count_next = lead(count, order_by = incident_year)) %>%
+  filter(incident_year == 2010 | incident_year == 2015) %>%
+  ungroup() %>% 
+  inner_join(neighborhood_gentrification, by = c("city" = "city",
+                                                 "neighborhood" = "neighborhood",
+                                                 "incident_year" = "year")) %>% 
+  mutate(rate = 1000 * count / total_pop
+         ,rate_next = 1000 * count_next / total_pop) # rate x 1k
+  
+# remove geometry
+data$geometry <- NULL
+
+# prep for modeling
+data <- data %>%  
+  filter(gentrifiable_prior) %>% 
+  mutate_at(vars(city, incident_year, gentrifiable, gentrifying), as.factor) %>% 
+  mutate_at(vars(rate, rate_next), log) %>% 
+  rename_at(vars(rate, rate_next), ~paste0(., "_log")) %>% 
+  filter(complete.cases(.)) %>% 
+  identity()
+
+ggplot(data, aes(x = rate_next_log)) +
+  geom_density(aes(fill = city, group = city), alpha = 0.4)
+
+ggplot(data, aes(x = rate_log)) +
+  geom_density(aes(fill = city, group = city), alpha = 0.4)
+
+X <- model.matrix(rate_next_log ~ rate_log + city * incident_year + gentrifiable + gentrifying, data)
+lm <- lm(rate_next_log ~ rate_log + city + incident_year + gentrifiable + gentrifying, data)
+summary(lm)
+
+stan_dat <- list(
+  N = nrow(X)
+  ,y = log(data$count_next)
+  ,K = ncol(X)
+  ,X = X
+)
+```
+
+# Modeling!
+```{r}
+fit <- stan(file = "model.stan", data = stan_dat)
+```
+
+```{r}
+library(broom)
+
+param_sampled <- as_tibble(x = as.vector(as.matrix(fit)[ ,8]))
+
+ggplot(param_sampled, aes(x = value)) +
+  geom_density(fill = "#ca0500") +
+  geom_vline(xintercept = quantile(param_sampled$value, probs = c(.05, .95)))
+
+sum(param_sampled$value < 0) / length(param_sampled$value)
+sum(param_sampled$value > 0) / length(param_sampled$value)
+
+fit_broom <- fit %>% 
+  tidy(conf.int = TRUE, conf.level = 0.95, conf.method = "quantile")
+
+fit_broom <- fit_broom %>% 
+  mutate(
+    term = c(colnames(X), "sigma")
+  ) 
+
+ggplot(fit_broom %>% slice(-c(1, 9)), aes(x = term, y = estimate)) +
+  geom_linerange(aes(ymin = conf.low, ymax = conf.high), size = 3,
+                 alpha = .6, color = "gold") +
+  geom_point(size = 3) +
+  geom_vline(xintercept = 0, color = "gray68") +
+  labs(
+    y = "Estimate (log incidents per 1K)"
+    ,caption = "Bars represent 95% credible interval"
+  ) +
+  coord_flip() 
+
+# plot(fit)
+# stan_dens(fit, pars = "beta[8]")
+# stan_trace(fit)
+```
+
+

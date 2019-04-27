@@ -51,6 +51,7 @@ calculate_gentrification <- function(tracts_neighborhoods_2015_sf,
       ,prop_housing_built_last_20 = mean(prop_housing_built_last_20 * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
       ,median_rent = mean(median_rent * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
       ,median_family_income = mean(median_family_income * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
+      ,total_pop = sum(total_pop * wt)
     ) %>% 
     ungroup()
   
@@ -62,6 +63,7 @@ calculate_gentrification <- function(tracts_neighborhoods_2015_sf,
       ,prop_housing_built_last_20 = mean(prop_housing_built_last_20 * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
       ,median_rent = adj_2010 * mean(median_rent * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
       ,median_family_income = mean(median_family_income * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
+      ,total_pop = sum(total_pop * wt)
     ) %>% 
     ungroup()
   
@@ -73,6 +75,7 @@ calculate_gentrification <- function(tracts_neighborhoods_2015_sf,
       ,prop_housing_built_last_20 = mean(prop_housing_built_last_20 * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
       ,median_rent = mean(median_rent * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
       ,median_family_income = mean(median_family_income * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
+      ,total_pop = sum(total_pop * wt)
     ) %>% 
     ungroup()
   
@@ -93,7 +96,7 @@ calculate_gentrification <- function(tracts_neighborhoods_2015_sf,
   msa_stats_2010 <- msa_2010 %>% 
     filter(grepl(city_name, name)) %>% 
     select(-(1:2))
-  5
+  
   msa_stats_2000 <- msa_2000 %>% 
     filter(grepl(city_name, name)) %>% 
     select(-(1:2))
