@@ -50,7 +50,7 @@ calculate_gentrification <- function(tracts_neighborhoods_2015_sf,
       prop_college_degree = mean(prop_college_degree * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
       ,prop_housing_built_last_20 = mean(prop_housing_built_last_20 * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
       ,median_rent = mean(median_rent * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
-      ,median_family_income = mean(median_family_income * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
+      ,median_household_income = mean(median_household_income * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
       ,total_pop = sum(total_pop * wt)
     ) %>% 
     ungroup()
@@ -62,7 +62,7 @@ calculate_gentrification <- function(tracts_neighborhoods_2015_sf,
       prop_college_degree = mean(prop_college_degree * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
       ,prop_housing_built_last_20 = mean(prop_housing_built_last_20 * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
       ,median_rent = adj_2010 * mean(median_rent * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
-      ,median_family_income = mean(median_family_income * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
+      ,median_household_income = mean(median_household_income * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
       ,total_pop = sum(total_pop * wt)
     ) %>% 
     ungroup()
@@ -74,7 +74,7 @@ calculate_gentrification <- function(tracts_neighborhoods_2015_sf,
       prop_college_degree = mean(prop_college_degree * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
       ,prop_housing_built_last_20 = mean(prop_housing_built_last_20 * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
       ,median_rent = mean(median_rent * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
-      ,median_family_income = mean(median_family_income * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
+      ,median_household_income = mean(median_household_income * total_pop * wt, na.rm = TRUE) / sum(total_pop * wt)
       ,total_pop = sum(total_pop * wt)
     ) %>% 
     ungroup()
@@ -91,16 +91,16 @@ calculate_gentrification <- function(tracts_neighborhoods_2015_sf,
 
   msa_stats_2015 <- msa_2015 %>% 
     filter(grepl(city_name, name)) %>% 
-    select(-(1:2))
+    select(-gisjoin, -name)
   
   msa_stats_2010 <- msa_2010 %>% 
     filter(grepl(city_name, name)) %>% 
-    select(-(1:2))
+    select(-gisjoin, -name)
   
   msa_stats_2000 <- msa_2000 %>% 
     filter(grepl(city_name, name)) %>% 
-    select(-(1:2))
-
+    select(-gisjoin, -name)
+  
   msa_stats <- msa_stats_2015 %>% 
     bind_rows(msa_stats_2010) %>% 
     bind_rows(msa_stats_2000 %>% mutate(year = as.character(year))) %>% 
@@ -112,7 +112,7 @@ calculate_gentrification <- function(tracts_neighborhoods_2015_sf,
     mutate(
       percent_change_college_degree = (prop_college_degree - prop_college_degree_prior) / prop_college_degree_prior
       ,percent_change_college_degree_msa = (prop_college_degree_msa - prop_college_degree_prior_msa) / prop_college_degree_prior_msa
-      ,gentrifiable = median_family_income < median_family_income_msa & 
+      ,gentrifiable = median_household_income < median_household_income_msa & 
           prop_housing_built_last_20 < prop_housing_built_last_20_msa
       ,gentrifying = case_when(
         year == "2000" ~ NA

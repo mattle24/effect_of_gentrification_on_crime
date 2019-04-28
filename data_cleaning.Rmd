@@ -1,5 +1,5 @@
 ---
-title: "Obtian and Munge Incident Data"
+title: "Obtain and Munge Incident Data"
 author: "Matt Lehman"
 date: "`r format(Sys.time(), '%b %d, %Y')`"
 output:
@@ -17,6 +17,10 @@ output:
 Read crime incident data and match to neighborhoods. 
 
 # Packages and Setup
+
+```{r}
+knitr::opts_chunk$set(fig.width = 5, fig.height = 6, dpi=300)
+```
 
 ```{r}
 library(janitor)
@@ -38,7 +42,7 @@ source("geospatial_matching.R")
 
 
 ```{r}
-yrs_of_interest <- tibble(incident_year = c(2010L, 2012L, 2015L, 2017L))
+yrs_of_interest <- tibble(incident_year = c(2012L, 2013L, 2017L, 2018L))
 ```
 
 # Read and Munge Data
@@ -63,13 +67,15 @@ res <- raw_philly %>%
     ,city = "Philadelphia"
   ) %>% 
   semi_join(yrs_of_interest) %>% 
-  dplyr::filter(lng != 0 & lat != 0) %>% 
+  mattle24utils::filter_verbose(lng != 0 & lat != 0) %>% 
   drop_na(lng, lat) %>% 
   st_as_sf(
     coords = c("lng", "lat")
     ,crs = "+init=EPSG:4326"
   )
 
+
+raw_philly
 
 # raw_philly_sf <- NULL # rm to free memory
 ```
@@ -90,10 +96,10 @@ tmp <- tmp %>%
   gather("incident_year", "count", -neighborhood) %>% 
   mutate(
     incident_year = case_when(
-      grepl( "2010", incident_year) ~ 2010
-      ,grepl("2012", incident_year) ~ 2012
-      ,grepl("2015", incident_year) ~ 2015
+      grepl( "2012", incident_year) ~ 2012
+      ,grepl("2013", incident_year) ~ 2013
       ,grepl("2017", incident_year) ~ 2017
+      ,grepl("2018", incident_year) ~ 2018
     )
   )
 
@@ -108,6 +114,7 @@ ggplot(x) +
   geom_sf(aes(fill = count)) +
   facet_wrap(~incident_year) +
   scale_fill_gradient(low = pal[1], high = pal[5]) +
+  coord_sf(datum = NA) +
   NULL
 ```
 
@@ -178,10 +185,10 @@ tmp <- tmp %>%
   gather("incident_year", "count", -neighborhood) %>% 
   mutate(
     incident_year = case_when(
-      grepl( "2010", incident_year) ~ 2010
-      ,grepl("2012", incident_year) ~ 2012
-      ,grepl("2015", incident_year) ~ 2015
+      grepl( "2012", incident_year) ~ 2012
+      ,grepl("2013", incident_year) ~ 2013
       ,grepl("2017", incident_year) ~ 2017
+      ,grepl("2018", incident_year) ~ 2018
     )
   )
 
@@ -256,10 +263,10 @@ tmp <- tmp %>%
   gather("incident_year", "count", -neighborhood) %>% 
   mutate(
     incident_year = case_when(
-      grepl( "2010", incident_year) ~ 2010
-      ,grepl("2012", incident_year) ~ 2012
-      ,grepl("2015", incident_year) ~ 2015
+      grepl( "2012", incident_year) ~ 2012
+      ,grepl("2013", incident_year) ~ 2013
       ,grepl("2017", incident_year) ~ 2017
+      ,grepl("2018", incident_year) ~ 2018
     )
   )
 
@@ -281,10 +288,13 @@ saveRDS(x, "data/la_neighborhood_incident_count.RDS")
 ```
 
 ```{r San Francisco}
-raw_sf <- read_csv("C:/Users/Matt_2/Downloads/Police_Department_Incident_Reports__Historical_2003_to_May_2018.csv")
-raw_sf <- clean_names(raw_sf)
+raw_sf_old <- read_csv("C:/Users/Matt_2/Downloads/Police_Department_Incident_Reports__Historical_2003_to_May_2018.csv")
+raw_sf_old <- clean_names(raw_sf_old)
 
-res <- raw_sf %>%
+raw_sf_new <- read_csv(glue("{downloads_path}/Police_Department_Incident_Reports__2018_to_Present.csv"))
+raw_sf_new <- clean_names(raw_sf_new)
+
+res <- raw_sf_old %>%
   select(x, y, incident_date = date, description = descript) %>% 
   mutate(
     incident_date = as.Date(incident_date, format = "%m/%d/%Y"),
@@ -292,13 +302,24 @@ res <- raw_sf %>%
     city = "San Francisco"
   ) %>% 
   semi_join(yrs_of_interest) %>% 
+  filter(incident_year != 2018) %>% 
   mattle24utils::filter_verbose(x != 0 & y != 0) %>% 
+  mattle24utils::drop_na_verbose(x, y) %>% 
+  bind_rows(
+    raw_sf_new %>%
+      select(x = longitude, y = latitude, incident_date, incident_year, description = incident_description) %>% 
+      mutate(city = "San Francisco") %>% 
+      filter(incident_year == 2018) %>% 
+      mattle24utils::filter_verbose(x != 0 & y != 0) %>% 
+      mattle24utils::drop_na_verbose(x, y)
+  ) %>% 
   st_as_sf(
     coords = c("x", "y")
     ,crs = "+init=EPSG:4326"
-  )
+  ) 
 
-raw_sf <- NULL
+raw_sf_old <- NULL
+raw_sf_new <- NULL
 ```
 
 
@@ -316,10 +337,10 @@ tmp <- tmp %>%
   gather("incident_year", "count", -neighborhood) %>% 
   mutate(
     incident_year = case_when(
-      grepl( "2010", incident_year) ~ 2010
-      ,grepl("2012", incident_year) ~ 2012
-      ,grepl("2015", incident_year) ~ 2015
+      grepl( "2012", incident_year) ~ 2012
+      ,grepl("2013", incident_year) ~ 2013
       ,grepl("2017", incident_year) ~ 2017
+      ,grepl("2018", incident_year) ~ 2018
     )
   )
 

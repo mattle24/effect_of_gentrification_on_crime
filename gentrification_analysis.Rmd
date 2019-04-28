@@ -25,7 +25,13 @@ for median house value. The Census estimated median house value decreased in man
 
 # Packages and Setup
 
-```{r packages}
+```{r}
+knitr::opts_chunk$set(
+  message = FALSE
+)
+```
+
+```{r packages, echo=FALSE, warning=FALSE, message=FALSE}
 library(janitor)
 library(sf)
 library(dplyr)
@@ -33,6 +39,7 @@ library(readr)
 library(glue)
 library(tibble)
 library(geojsonsf)
+library(ggplot2)
 ```
 
 ```{r}
@@ -44,150 +51,108 @@ source("calculate_gentrification.R")
 
 ## Census Data
 
-Read in 2015, 2010, and 2015 data and munge.
+Read in 2013-2017 ACS, 2008-2012 ACS, and 2000 decennial data and munge.
 
-### 2015
+### 2017
 
 ```{r}
-file_path <- "C:/Users/Matt_2/Downloads/nhgis0057_csv/nhgis0057_csv"
-file_path2 <- "C:/Users/Matt_2/Downloads/nhgis0058_csv/nhgis0058_csv"
-file_path3 <- "C:/Users/Matt_2/Downloads/nhgis0059_csv/nhgis0059_csv"
-
-file_names_2015 <- c("nhgis0057_ds215_20155_2015_cbsa", "nhgis0057_ds215_20155_2015_tract", "nhgis0057_ds216_20155_2015_cbsa", "nhgis0057_ds216_20155_2015_tract")
+file_path <- "C:/Users/Matt_2/Downloads/nhgis0061_csv/nhgis0061_csv"
 ```
 
-Read in 2015 data and munge 
+Read in 2017 data and munge 
 
 
-```{r 2015 msa}
-msa_2015_a <- read_csv(glue("{file_path}/{file_name}.csv", file_name = file_names_2015[1]))
-msa_2015_a <- clean_names(msa_2015_a)
+```{r 2017 msa}
+msa_2017 <- read_csv(glue("{file_path}/nhgis0061_ds233_20175_2017_cbsa.csv"))
+msa_2017 <- clean_names(msa_2017)
 
-msa_2015_a_clean <- msa_2015_a %>% 
+msa_2017 <- msa_2017 %>% 
   mutate(
-    prop_college_degree = (admze021 + admze022 + admze023 + admze024 + admze025) / admze001
-    # have to estimate 1995 - 2000 since all I have is 1990 - 2000
-    ,prop_housing_built_last_20 = (adqse002 + adqse003 + adqse004 + (adqse005/2)) / adqse001
+    prop_college_degree = (ah04e021 + ah04e022 + ah04e023 + ah04e024 + ah04e025) / ah04e001
+    # have to estimate 1997 - 1999 since all I have is 1990 - 1999
+    ,prop_housing_built_last_20 = (ah4ze002 + ah4ze003 + ah4ze004 + (ah4ze005*(2/9))) / ah4ze001
   ) %>%
   select(gisjoin, name = cbsa, year, prop_college_degree, prop_housing_built_last_20,
-         median_house_value = adrwe001, total_pop = adk5e001) %>% 
+         median_rent = ah5re001, median_house_value = ah53e001,
+         median_household_income = ah1pe001,
+         total_pop = ahy1e001) %>% 
   identity()
-
-msa_2015_b <- read_csv(glue("{file_path}/{file_name}.csv", file_name = file_names_2015[3]))
-msa_2015_b <- clean_names(msa_2015_b)
-
-msa_201b_b_clean <- msa_2015_b %>% 
-  select(gisjoin, median_family_income = ad4le001)
-
-msa_2015 <- msa_2015_a_clean %>% 
-  full_join(msa_201b_b_clean, by = "gisjoin")
-
-msa_2015_a <- NULL
-msa_2015_a_clean <- NULL
-msa_2015_b <- NULL
-msa_201b_b_clean <- NULL
 
 # filter to MSAs of interest
 # make a tibble for easy reference for city abbr to MSA gisjoin
-city_msa_bridge_2015 <- tibble(
+
+city_msa_bridge_2017 <- tibble(
   gisjoin = c("G41860", "G31080" ,"G37980", "G38300")
   ,city_abbr = c("sf", "la", "ph", "pi")
 )
-msa_2015 <- msa_2015 %>% 
-  semi_join(city_msa_bridge_2015)
+msa_2017 <- msa_2017 %>% 
+  semi_join(city_msa_bridge_2017)
 ```
 
-```{r 2015 tracts}
-tracts_2015_a <- read_csv(glue("{file_path}/{file_name}.csv", file_name = file_names_2015[2]))
-tracts_2015_a <- clean_names(tracts_2015_a)
+```{r 2017 block_grps}
+block_grps_2017 <- read_csv(glue("{file_path}/nhgis0061_ds233_20175_2017_blck_grp.csv"))
+block_grps_2017 <- clean_names(block_grps_2017)
 
-tracts_2015_a <- tracts_2015_a %>% 
+block_grps_2017 <- block_grps_2017 %>% 
   mutate(
-    prop_college_degree = (admze021 + admze022 + admze023 + admze024 + admze025) / admze001
-    # have to estimate 1995 - 2000 since all I have is 1990 - 2000
-    ,prop_housing_built_last_20 = (adqse002 + adqse003 + adqse004 + (adqse005/2)) / adqse001
+    prop_college_degree = (ah04e021 + ah04e022 + ah04e023 + ah04e024 + ah04e025) / ah04e001
+    # have to estimate 1997 - 1999 since all I have is 1990 - 1999
+    ,prop_housing_built_last_20 = (ah4ze002 + ah4ze003 + ah4ze004 + (ah4ze005*(2/9))) / ah4ze001
   ) %>%
-  select(gisjoin, name = tracta, year, prop_college_degree, prop_housing_built_last_20,
-         median_house_value = adrwe001, total_pop = adk5e001) %>% 
+  select(gisjoin, name = blkgrpa, year, prop_college_degree, prop_housing_built_last_20,
+         median_rent = ah5re001, median_house_value = ah53e001,
+         median_household_income = ah1pe001,
+         total_pop = ahy1e001) %>% 
   identity()
-
-tracts_2015_b <- read_csv(glue("{file_path}/{file_name}.csv", file_name = file_names_2015[4]))
-tracts_2015_b <- clean_names(tracts_2015_b)
-
-tracts_2015_b <- tracts_2015_b %>%
-  select(gisjoin, median_family_income = ad4le001)
-
-tracts_2015_c <- read_csv(glue("{file_path3}/nhgis0059_ds215_20155_2015_tract.csv"))
-tracts_2015_c <- clean_names(tracts_2015_c)
-
-tracts_2015_c <- tracts_2015_c %>% 
-  select(gisjoin, median_rent = adrke001)
-
-tracts_2015 <- tracts_2015_a %>% 
-  full_join(tracts_2015_b, by = "gisjoin") %>% 
-  full_join(tracts_2015_c, by = "gisjoin")
-
-tracts_2015_a <- NULL
-tracts_2015_b <- NULL
-tracts_2015_c <- NULL
 ```
 
 
 ### 2010
 
-Read in 2010 data and munge
+Read in 2008 - 2012 ACS data and munge
 
-```{r 2010 msa}
-msa_2010 <- read_csv(glue("{file_path2}/nhgis0058_ds176_20105_2010_cbsa.csv"))
-msa_2010 <- clean_names(msa_2010)
+```{r 2012 msa}
+msa_2012 <- read_csv(glue("{file_path}/nhgis0061_ds191_20125_2012_cbsa.csv"))
+msa_2012 <- clean_names(msa_2012)
 
-msa_2010 <- msa_2010 %>% 
+msa_2012 <- msa_2012 %>% 
   mutate(
-    prop_college_degree = (jn9e014 + jn9e015 + jn9e016 + jn9e017 + jn9e018 +
-                             jn9e031 + jn9e032 + jn9e033 + jn9e034 + jn9e035) / jn9e001
-    ,prop_housing_built_last_20 = (jsde002 + jsde003 + jsde004) / jsde001
-  ) %>% 
-  select(gisjoin, name = cbsa, year, prop_college_degree,
-         prop_housing_built_last_20, median_house_value = jtie001,
-         median_family_income = jpoe001)
+    prop_college_degree = (quse021 + quse021 + quse021 + quse021 + quse021) / quse001
+    # have to estimate 1992 - 1999 since all I have is 1990 - 1999
+    ,prop_housing_built_last_20 = (qy1e002 + qy1e003 + (qy1e004 * (7/9))) / qy1e001
+  ) %>%
+  select(gisjoin, name = cbsa, year, prop_college_degree, prop_housing_built_last_20,
+         median_rent = qzte001, median_house_value = qz6e001,
+         median_household_income = qz6e001,
+         total_pop = qspe001) %>% 
+  identity()
 
-city_msa_bridge_2010 <- tibble(
-  gisjoin = c("G31100", "G41860", "G38300", "G37980")
-  ,city = c("la", "sf", "pi", "ph")
+# filter to MSAs of interest
+# make a tibble for easy reference for city abbr to MSA gisjoin
+city_msa_bridge_2012 <- tibble(
+  gisjoin = c("G41860", "G31100" ,"G37980", "G38300")
+  ,city_abbr = c("sf", "la", "ph", "pi")
 )
-
-msa_2010 <- msa_2010 %>% 
-  semi_join(city_msa_bridge_2010, by = "gisjoin")
+msa_2012 <- msa_2012 %>% 
+  semi_join(city_msa_bridge_2012)
 ```
 
 
-```{r 2010 tracts}
-tracts_2010_a <- read_csv(glue("{file_path2}/nhgis0058_ds176_20105_2010_tract.csv"))
-tracts_2010_a <- clean_names(tracts_2010_a)
+```{r 2012 block_grps}
+block_grps_2012 <- read_csv(glue("{file_path}/nhgis0061_ds191_20125_2012_blck_grp.csv"))
+block_grps_2012 <- clean_names(block_grps_2012)
 
-tracts_2010_a <- tracts_2010_a %>% 
+block_grps_2012 <- block_grps_2012 %>% 
   mutate(
-    prop_college_degree = (jn9e014 + jn9e015 + jn9e016 + jn9e017 + jn9e018 +
-                             jn9e031 + jn9e032 + jn9e033 + jn9e034 + jn9e035) / jn9e001
-    ,prop_housing_built_last_20 = (jsde002 + jsde003 + jsde004) / jsde001
-  ) %>% 
-  select(gisjoin, name = tracta, year, prop_college_degree,
-         prop_housing_built_last_20, median_house_value = jtie001,
-         median_family_income = jpoe001)
-
-tracts_2010_b <- read_csv(glue("{file_path}/nhgis0057_ds172_2010_tract.csv"))
-tracts_2010_b <- clean_names(tracts_2010_b)
-
-tracts_2010_c <- read_csv(glue("{file_path3}/nhgis0059_ds176_20105_2010_tract.csv"))
-tracts_2010_c <- clean_names(tracts_2010_c)
-
-tracts_2010 <- tracts_2010_a %>% 
-  full_join(tracts_2010_b %>% select(gisjoin, total_pop = h7z001), by = "gisjoin") %>% 
-  full_join(tracts_2010_c %>% select(gisjoin, median_rent = js5e001), by = "gisjoin")
-  
-tracts_2010_a <- NULL
-tracts_2010_b <- NULL
-tracts_2000_c <- NULL
+    prop_college_degree = (quse021 + quse021 + quse021 + quse021 + quse021) / quse001
+    # have to estimate 1992 - 1999 since all I have is 1990 - 1999
+    ,prop_housing_built_last_20 = (qy1e002 + qy1e003 + (qy1e004 * (7/9))) / qy1e001
+  ) %>%
+  select(gisjoin, name = blkgrpa, year, prop_college_degree, prop_housing_built_last_20,
+         median_rent = qzte001, median_house_value = qz6e001,
+         median_household_income = qz6e001,
+         total_pop = qspe001) %>% 
+  identity()
 ```
 
 ### 2000
@@ -195,55 +160,68 @@ tracts_2000_c <- NULL
 Read in 2000 data and munge
 
 ```{r 2000 msa}
-msa_2000 <- read_csv(glue("{file_path2}/nhgis0058_ds151_2000_msa_cmsa.csv"))
-msa_2000 <- clean_names(msa_2000)
+msa_2000_a <- read_csv(glue("{file_path}/nhgis0061_ds146_2000_msa_cmsa.csv"))
+msa_2000_a <- clean_names(msa_2000_a)
 
-msa_2000 <- msa_2000 %>% 
-  mutate(
+msa_2000_a <- msa_2000_a %>% 
+  select(gisjoin, year, name = msa_cmsa, total_pop = fl5001)
+
+msa_2000_b <- read_csv(glue("{file_path}/nhgis0061_ds151_2000_msa_cmsa.csv"))
+msa_2000_b <- clean_names(msa_2000_b)
+
+msa_2000_b <- msa_2000_b %>% 
+   mutate(
     prop_college_degree = ((gkt012 + gkt013 + gkt014 + gkt015 + gkt016 +
-                             gkt028 + gkt029 + gkt030 + gkt031 + gkt031) / 
+                             gkt028 + gkt029 + gkt030 + gkt031 + gkt031) /
                              rowSums(select(., contains("gkt")), na.rm = TRUE))
     ,prop_housing_built_last_20 = (gaj001 + gaj002 + gaj003 + gaj004) / rowSums(select(., contains("gaj")), na.rm = TRUE)
-  ) %>% 
-  select(gisjoin, name = msa_cmsa, year, prop_college_degree, prop_housing_built_last_20,
-         median_house_value = gb7001, median_family_income = gno001)
+  ) %>%
+  select(gisjoin, prop_college_degree, prop_housing_built_last_20,
+         median_rent = gbo001, median_house_value = gb7001,
+         median_household_income = gmy001)
+
+msa_2000 <- msa_2000_a %>% 
+  full_join(msa_2000_b, by = "gisjoin")
+
+# filter to MSAs of interest
+# make a tibble for easy reference for city abbr to MSA gisjoin
+city_msa_bridge_2000 <- tibble(
+  gisjoin = c("G7362", "G4472" ,"G6162", "G6280")
+  ,city_abbr = c("sf", "la", "ph", "pi")
+)
+msa_2000 <- msa_2000 %>% 
+  semi_join(city_msa_bridge_2000)
+
+msa_2000_a <- NULL
+msa_2000_b <- NULL
 ```
 
-
 ```{r 2000 tracts}
-tracts_2000_a <- read_csv(glue("{file_path2}/nhgis0058_ds151_2000_tract.csv"))
+tracts_2000_a <- read_csv(glue("{file_path}/nhgis0061_ds146_2000_tract.csv"))
 tracts_2000_a <- clean_names(tracts_2000_a)
 
 tracts_2000_a <- tracts_2000_a %>% 
-  mutate(
-    prop_college_degree = ((gkt012 + gkt013 + gkt014 + gkt015 + gkt016 +
-                             gkt028 + gkt029 + gkt030 + gkt031 + gkt031) / 
-                             rowSums(select(., contains("gkt")), na.rm = TRUE))
-    ,prop_housing_built_last_20 = (gaj001 + gaj002 + gaj003 + gaj004) / rowSums(select(., contains("gaj")), na.rm = TRUE)
-  ) %>% 
-  select(gisjoin, name = tracta, year, prop_college_degree, prop_housing_built_last_20,
-         median_house_value = gb7001, median_family_income = gno001)
+  select(gisjoin, year, name = tracta, total_pop = fl5001)
 
-tracts_2000_b <- read_csv(glue("{file_path}/nhgis0057_ds146_2000_tract.csv"))
+tracts_2000_b <- read_csv(glue("{file_path}/nhgis0061_ds151_2000_tract.csv"))
 tracts_2000_b <- clean_names(tracts_2000_b)
 
 tracts_2000_b <- tracts_2000_b %>% 
-  mutate(total_pop = rowSums(select(., contains("fms")), na.rm = TRUE)) %>% 
-  select(gisjoin, total_pop)
-
-tracts_2000_c <- read_csv(glue("{file_path3}/nhgis0059_ds151_2000_tract.csv"))
-tracts_2000_c <- clean_names(tracts_2000_c)
-
-tracts_2000_c <- tracts_2000_c %>% 
-  select(gisjoin, median_rent = gbo001)
+   mutate(
+    prop_college_degree = ((gkt012 + gkt013 + gkt014 + gkt015 + gkt016 +
+                             gkt028 + gkt029 + gkt030 + gkt031 + gkt031) /
+                             rowSums(select(., contains("gkt")), na.rm = TRUE))
+    ,prop_housing_built_last_20 = (gaj001 + gaj002 + gaj003 + gaj004) / rowSums(select(., contains("gaj")), na.rm = TRUE)
+  ) %>%
+  select(gisjoin, prop_college_degree, prop_housing_built_last_20,
+         median_rent = gbo001, median_house_value = gb7001,
+         median_household_income = gmy001)
 
 tracts_2000 <- tracts_2000_a %>% 
-  full_join(tracts_2000_b, by = "gisjoin") %>% 
-  full_join(tracts_2000_c, by = "gisjoin") 
+  full_join(tracts_2000_b, by = "gisjoin")
 
 tracts_2000_a <- NULL
 tracts_2000_b <- NULL
-tracts_2000_c <- NULL
 ```
 
 ## Geospatial data
@@ -251,7 +229,11 @@ tracts_2000_c <- NULL
 Read in neighborhoods
 
 ```{r read neigborhoods}
-# phily_neighborhoods <- read_sf("C:/Users/Matt_2/Downloads/Neighborhoods_Philadelphia")
+philly_neighborhoods_sf <- read_sf("C:/Users/Matt_2/Downloads/Neighborhoods_Philadelphia")
+philly_neighborhoods_sf <- philly_neighborhoods_sf %>% 
+  select(neighborhood = NAME) %>% 
+  st_transform(crs = 4326)
+  
 # https://pittsburghpa.maps.arcgis.com/apps/OnePane/basicviewer/index.html?appid=7b284a2998454505a6f000d24ee1ded5
 pitt_neighborhoods_sf <- geojson_sf("C:/Users/Matt_2/Downloads/Neighborhoods_with_SNAP_Data.geojson")
 pitt_neighborhoods_sf <- pitt_neighborhoods_sf %>% 
@@ -270,97 +252,113 @@ sf_neighborhoods_sf <- sf_neighborhoods_sf %>%
 Read in tracts
 
 ```{r read tracts} 
-tracts_2015_sf <- read_sf("C:/Users/Matt_2/Downloads/nhgis0055_shape/nhgis0055_shape/nhgis0055_shapefile_tl2015_us_tract_2015")
-tracts_2015_sf <- clean_names(tracts_2015_sf)
+block_grp_file_path <- "C:/Users/Matt_2/Downloads/nhgis0062_shape/nhgis0062_shape"
 
-tracts_2010_sf <- read_sf("C:/Users/Matt_2/Downloads/nhgis0055_shape/nhgis0055_shape/nhgis0055_shapefile_tl2010_us_tract_2010")
-tracts_2010_sf <- clean_names(tracts_2010_sf)
+# 2017
+pa_block_grps_2017_sf <- read_sf(glue("{block_grp_file_path}/nhgis0062_shapefile_tl2017_420_blck_grp_2017"))
+pa_block_grps_2017_sf <- clean_names(pa_block_grps_2017_sf) %>% 
+  st_transform(crs = 4326)
+ca_block_grps_2017_sf <- read_sf(glue("{block_grp_file_path}/nhgis0062_shapefile_tl2017_060_blck_grp_2017"))
+ca_block_grps_2017_sf <- clean_names(ca_block_grps_2017_sf) %>% 
+  st_transform(crs = 4326)
 
+
+# 2012
+pa_block_grps_2012_sf <- read_sf(glue("{block_grp_file_path}/nhgis0062_shapefile_tl2012_420_blck_grp_2012"))
+pa_block_grps_2012_sf <- clean_names(pa_block_grps_2012_sf) %>% 
+  st_transform(crs = 4326)
+ca_block_grps_2012_sf <- read_sf(glue("{block_grp_file_path}/nhgis0062_shapefile_tl2012_060_blck_grp_2012"))
+ca_block_grps_2012_sf <- clean_names(ca_block_grps_2012_sf) %>% 
+  st_transform(crs = 4326)
+
+
+# 2000
 tracts_2000_sf <- read_sf("C:/Users/Matt_2/Downloads/nhgis0055_shape/nhgis0055_shape/nhgis0055_shapefile_tl2000_us_tract_2000", layer = "US_tract_2000")
 tracts_2000_sf <- clean_names(tracts_2000_sf)
-```
 
-
-# Modeling Gentrification
-
-For each city, match tracts to neighborhoods, and filter out tracts that are not in neighborhoods. Weight neighborhood means by tract population times area in neighborhood.
-
-```{r, echo=FALSE}
-# PA fips is 42
-pa_tracts_2015_sf <- tracts_2015_sf %>% 
-  filter(statefp == "42") %>% 
-  st_transform(crs = 4326)
-
-pa_tracts_2010_sf <- tracts_2010_sf %>% 
-  filter(statefp10 == "42") %>% 
-  st_transform(crs = 4326)
-
+# PA fips is 42, CA is 06
 pa_tracts_2000_sf <- tracts_2000_sf %>% 
   filter(nhgisst == "420") %>% 
-  st_transform(crs = 4326)
-
-ca_tracts_2015_sf <- tracts_2015_sf %>% 
-  filter(statefp == "06") %>% 
-  st_transform(crs = 4326)
-
-ca_tracts_2010_sf <- tracts_2010_sf %>% 
-  filter(statefp10 == "06") %>% 
   st_transform(crs = 4326)
 
 ca_tracts_2000_sf <- tracts_2000_sf %>% 
   filter(nhgisst == "060") %>% 
   st_transform(crs = 4326)
 
+tracts_2000_sf <- NULL
+```
 
-pitt_tracts_neighborhoods_2015_sf <- tract_to_neighborhood(pitt_neighborhoods_sf, pa_tracts_2015_sf)
-pitt_tracts_neighborhoods_2010_sf <- tract_to_neighborhood(pitt_neighborhoods_sf, pa_tracts_2010_sf)
-pitt_tracts_neighborhoods_2000_sf <- tract_to_neighborhood(pitt_neighborhoods_sf, pa_tracts_2000_sf)
 
-la_tracts_neighborhoods_2015_sf <- tract_to_neighborhood(la_neighborhoods_sf, ca_tracts_2015_sf)
-la_tracts_neighborhoods_2010_sf <- tract_to_neighborhood(la_neighborhoods_sf, ca_tracts_2010_sf)
-la_tracts_neighborhoods_2000_sf <- tract_to_neighborhood(la_neighborhoods_sf, ca_tracts_2000_sf)
+# Modeling Gentrification
 
-sf_tracts_neighborhoods_2015_sf <- tract_to_neighborhood(sf_neighborhoods_sf, ca_tracts_2015_sf)
-sf_tracts_neighborhoods_2010_sf <- tract_to_neighborhood(sf_neighborhoods_sf, ca_tracts_2010_sf)
-sf_tracts_neighborhoods_2000_sf <- tract_to_neighborhood(sf_neighborhoods_sf, ca_tracts_2000_sf)
+For each city, match blocks or tracts to neighborhoods, and filter out those
+that are not in neighborhoods. Weight blocks or tracts by area in neighborhood.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+philly_block_grps_neighborhoods_2017_sf <- sub_geometry_to_neighborhood(philly_neighborhoods_sf, pa_block_grps_2017_sf)
+philly_block_grps_neighborhoods_2012_sf <- sub_geometry_to_neighborhood(philly_neighborhoods_sf, pa_block_grps_2012_sf)
+philly_tracts_neighborhoods_2000_sf <- sub_geometry_to_neighborhood(philly_neighborhoods_sf, pa_tracts_2000_sf)
+
+pitt_block_grps_neighborhoods_2017_sf <- sub_geometry_to_neighborhood(pitt_neighborhoods_sf, pa_block_grps_2017_sf)
+pitt_block_grps_neighborhoods_2012_sf <- sub_geometry_to_neighborhood(pitt_neighborhoods_sf, pa_block_grps_2012_sf)
+pitt_tracts_neighborhoods_2000_sf <- sub_geometry_to_neighborhood(pitt_neighborhoods_sf, pa_tracts_2000_sf)
+
+la_block_grps_neighborhoods_2017_sf <- sub_geometry_to_neighborhood(la_neighborhoods_sf, ca_block_grps_2017_sf)
+la_block_grps_neighborhoods_2012_sf <- sub_geometry_to_neighborhood(la_neighborhoods_sf, ca_block_grps_2012_sf)
+la_tracts_neighborhoods_2000_sf <- sub_geometry_to_neighborhood(la_neighborhoods_sf, ca_tracts_2000_sf)
+
+sf_block_grps_neighborhoods_2017_sf <- sub_geometry_to_neighborhood(sf_neighborhoods_sf, ca_block_grps_2017_sf)
+sf_block_grps_neighborhoods_2012_sf <- sub_geometry_to_neighborhood(sf_neighborhoods_sf, ca_block_grps_2012_sf)
+sf_tracts_neighborhoods_2000_sf <- sub_geometry_to_neighborhood(sf_neighborhoods_sf, ca_tracts_2000_sf)
 ```
 
 Get average measure by taking weighted averages by area and population. 
 
 
-```{r}
-pitt_neighborhood_gentrification <- calculate_gentrification(pitt_tracts_neighborhoods_2015_sf,
-                                                             pitt_tracts_neighborhoods_2010_sf,
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+pitt_neighborhood_gentrification <- calculate_gentrification(pitt_block_grps_neighborhoods_2017_sf,
+                                                             pitt_block_grps_neighborhoods_2012_sf,
                                                              pitt_tracts_neighborhoods_2000_sf,
-                                                             tracts_2015,
-                                                             tracts_2010,
+                                                             block_grps_2017,
+                                                             block_grps_2012,
                                                              tracts_2000,
-                                                             msa_2015,
-                                                             msa_2010,
+                                                             msa_2017,
+                                                             msa_2012,
                                                              msa_2000,
                                                              "Pittsburgh")
 
-la_neighborhood_gentrification <- calculate_gentrification(la_tracts_neighborhoods_2015_sf,
-                                                             la_tracts_neighborhoods_2010_sf,
+la_neighborhood_gentrification <- calculate_gentrification(la_block_grps_neighborhoods_2017_sf,
+                                                             la_block_grps_neighborhoods_2012_sf,
                                                              la_tracts_neighborhoods_2000_sf,
-                                                             tracts_2015,
-                                                             tracts_2010,
+                                                             block_grps_2017,
+                                                             block_grps_2012,
                                                              tracts_2000,
-                                                             msa_2015,
-                                                             msa_2010,
+                                                             msa_2017,
+                                                             msa_2012,
                                                              msa_2000,
                                                              "Los Angeles")
 
-sf_neighborhood_gentrification <- calculate_gentrification(sf_tracts_neighborhoods_2015_sf,
-                                                             sf_tracts_neighborhoods_2010_sf,
+sf_neighborhood_gentrification <- calculate_gentrification(sf_block_grps_neighborhoods_2017_sf,
+                                                             sf_block_grps_neighborhoods_2012_sf,
                                                              sf_tracts_neighborhoods_2000_sf,
-                                                             tracts_2015,
-                                                             tracts_2010,
+                                                             block_grps_2017,
+                                                             block_grps_2012,
                                                              tracts_2000,
-                                                             msa_2015,
-                                                             msa_2010,
+                                                             msa_2017,
+                                                             msa_2012,
                                                              msa_2000,
                                                              "San Francisco")
+
+philly_neighborhood_gentrification <- calculate_gentrification(philly_block_grps_neighborhoods_2017_sf,
+                                                             philly_block_grps_neighborhoods_2012_sf,
+                                                             philly_tracts_neighborhoods_2000_sf,
+                                                             block_grps_2017,
+                                                             block_grps_2012,
+                                                             tracts_2000,
+                                                             msa_2017,
+                                                             msa_2012,
+                                                             msa_2000,
+                                                             "Philadelphia")
 ```
 
 ```{r}
@@ -384,6 +382,29 @@ ggplot() +
                                "Gentrified/ Wealthy" = "purple",
                                "Disadvantaged" = pal[2]), na.value = "black")
 ```
+
+```{r}
+philly_neighborhoods_sf %>% 
+  left_join(philly_neighborhood_gentrification, by = "neighborhood") %>% 
+  filter(year != "2000") %>% 
+  mutate(
+    gentrifying = case_when(
+      gentrifying ~ "Gentrifying"
+      ,!gentrifiable ~ "Gentrified/ Wealthy"
+      ,gentrifiable & !gentrifying ~ "Disadvantaged"
+      ,TRUE ~ NA_character_
+    ) %>% 
+      factor(levels = c("Disadvantaged", "Gentrifying", "Gentrified/ Wealthy"))
+  ) %>% 
+ggplot() +
+  geom_sf(aes(fill = gentrifying)) +
+  facet_grid(~year) +
+  scale_fill_manual(values = c("Gentrifying" = pal[3],
+                               "Gentrified/ Wealthy" = "purple",
+                               "Disadvantaged" = pal[2]), na.value = "black")
+
+```
+
 
 ```{r}
 la_neighborhoods_sf %>% 
@@ -429,52 +450,69 @@ ggplot() +
 
 ```
 
-```{r, eval = FALSE}
-# Trying to figure out why there was less gentrification in Pitt in '15 than '10.
-# It looks like educational attainment decreased in many gentrified neigborhoods.
-pitt_neighborhood_gentrification %>% 
-  filter(year != "2000") %>% 
-ggplot(aes(x = year, y = percent_change_college_degree)) +
-  geom_point(aes(color = gentrifying)) +
-  geom_line(aes(group = neighborhood)) +
-  geom_point(aes(x = year, y = percent_change_college_degree_msa), color = "green", size = 4) +
-  ylim(c(-1, 2))
-  
-# Trying to figure out why there was less gentrification in LA in '15 than '10.
-# It looks like median house value decreased in almost every neighborhood
-la_neighborhood_gentrification %>% 
-  filter(year != "2000") %>% 
-ggplot(aes(x = 2, y = median_house_value)) +
-  geom_point(aes(color = gentrifying)) +
-  geom_line(aes(group = neighborhood)) +
-  geom_point(aes(x = 1, y = median_house_value_prior), color = "green", size = 4) +
-  facet_wrap(~year)
+# Prepping for Model
 
+```{r, eval=FALSE}
+tmp <- philly_neighborhood_gentrification %>% 
+  bind_rows(pitt_neighborhood_gentrification) %>% 
+  bind_rows(la_neighborhood_gentrification) %>% 
+  bind_rows(sf_neighborhood_gentrification) %>% 
+  group_by(city, neighborhood) %>% 
+  mutate(
+    gentrifiable_prior = lag(gentrifiable, order = year)
+    ,gentrifying = case_when(
+      !gentrifying ~ FALSE
+      ,is.na(gentrifying) ~ NA
+      ,gentrifiable_prior & gentrifying ~ TRUE
+      ,!gentrifiable_prior & gentrifying ~ FALSE
+      ,TRUE ~ NA
+    )
+  ) %>% 
+  ungroup() %>% 
+  filter(year != "2000"
+         ,!is.na(gentrifying)
+         ,gentrifiable
+        ) %>% 
+  select(city, neighborhood, year, gentrifiable, gentrifying)
+
+tmp %>% 
+  group_by(city, year) %>% 
+  summarise(
+    neighborhoods = n()
+    ,gentrifying = sum(gentrifying)
+    ,pct_gentrifying =gentrifying / neighborhoods
+  ) %>% 
+ggplot(aes(x = year, y = pct_gentrifying, color = city)) + 
+  geom_jitter(width = 0.25, height = 0, size = 5) +
+  scale_y_continuous(labels = scales::percent) +
+  scale_color_brewer(type = "qual", palette = "Dark2") 
 ```
-
-
-
 
 ```{r}
-neighborhoods_final %>% 
-  mutate(gentrifying = ifelse(gentrifiable, gentrifying, NA)) %>% 
-  ggplot() +
-  geom_sf(aes(fill = gentrifying), color = "darkblue") +
-  geom_sf_label(aes(label = neighborhood), size = 2) +
-  colorblindr::scale_fill_OkabeIto()
+philly_neighborhood_gentrification %>% 
+  bind_rows(pitt_neighborhood_gentrification) %>% 
+  bind_rows(la_neighborhood_gentrification) %>% 
+  bind_rows(sf_neighborhood_gentrification) %>% 
+  mutate(
+    year = case_when(
+      year == "2000" ~ 2000
+      ,year == "2008-2012" ~ 2012
+      ,year == "2013-2017" ~ 2017
+    ) 
+  ) %>% 
+  group_by(city, neighborhood) %>% 
+  mutate(
+    gentrifiable_prior = lag(gentrifiable, order = year)
+    ,gentrifying = case_when(
+      !gentrifying ~ FALSE
+      ,is.na(gentrifying) ~ NA
+      ,gentrifiable_prior & gentrifying ~ TRUE
+      ,!gentrifiable_prior & gentrifying ~ FALSE
+      ,TRUE ~ NA
+    )
+  ) %>% 
+  ungroup() %>% 
+  saveRDS("data/neighborhood_gentrification.RDS")
 ```
 
 
-```{r}
-library(ggplot2)
-in_pitt <- rowSums(t(intersects_matrix), na.rm = TRUE) > 0
-ggplot(pitt_neighborhoods_sf) +
-  geom_sf(data = pa_tracts_2015_sf[in_pitt, ], color = "orange", fill = "yellow", alpha = 0.2) +
-  geom_sf(color = "darkblue", fill = NA) +
-  coord_sf(datum = NA)
-
-ggplot(neighborhood_sf) +
-  geom_sf(data = lo, color = "orange", fill = "yellow", alpha = 0.2) +
-  geom_sf(color = "darkblue", fill = NA) +
-  coord_sf(datum = NA)
-```

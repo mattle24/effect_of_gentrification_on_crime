@@ -2,6 +2,7 @@
 data {
   int<lower=0> N; // total number of neighborhoods
   int K; // number of parameters
+  int pos; // position of gentrifying param
   matrix[N, K] X; // data matrix
   vector[N] y; // log crime rate next
 }
@@ -17,5 +18,5 @@ model {
   
   // priors
   // prior for gentrifying
-  beta[8] ~ double_exponential(0, .1); 
+  beta[pos] ~ normal(-5, 1); 
 }
