@@ -75,9 +75,7 @@ res <- raw_philly %>%
   )
 
 
-raw_philly
-
-# raw_philly_sf <- NULL # rm to free memory
+raw_philly <- NULL # rm to free memory
 ```
 
 Match to neighborhood
@@ -88,29 +86,17 @@ philly_neighborhoods_sf <- philly_neighborhoods_sf %>%
   select(neighborhood = NAME) %>% 
   st_transform(crs = 4326)
 
-tmp <- incidents_in_neighborhood(philly_neighborhoods_sf, res) %>% 
-  clean_names()
-
-tmp$geometry <- NULL
-tmp <- tmp %>% 
-  gather("incident_year", "count", -neighborhood) %>% 
-  mutate(
-    incident_year = case_when(
-      grepl( "2012", incident_year) ~ 2012
-      ,grepl("2013", incident_year) ~ 2013
-      ,grepl("2017", incident_year) ~ 2017
-      ,grepl("2018", incident_year) ~ 2018
-    )
-  )
-
-x <- philly_neighborhoods_sf %>% 
-  left_join(tmp, by = "neighborhood")
+tmp <- incidents_in_neighborhood(philly_neighborhoods_sf, res) 
 ```
 
 
-```{r}
+```{r plot philly}
 pal <- RColorBrewer::brewer.pal(5, "Greens")
-ggplot(x) +
+
+philly_neighborhoods_sf %>% 
+  left_join(tmp, by = "neighborhood") %>% 
+  filter(type == "all") %>% 
+ggplot() +
   geom_sf(aes(fill = count)) +
   facet_wrap(~incident_year) +
   scale_fill_gradient(low = pal[1], high = pal[5]) +
@@ -118,8 +104,8 @@ ggplot(x) +
   NULL
 ```
 
-```{r}
-saveRDS(x, "data/philly_neighborhood_incident_count.RDS")
+```{r save philly}
+saveRDS(tmp, "data/philly_neighborhood_incident_count.RDS")
 ```
 
 
@@ -131,8 +117,6 @@ raw_pitt_new <- read_csv("C:/Users/Matt_2/Downloads/044f2016-1dfd-4ab0-bc1e-065d
 raw_pitt_new <- clean_names(raw_pitt_new)
 
 res <- raw_pitt_old %>% 
-  # select(lng = x, lat = y, incident_date = incidenttime,
-  #        description = offenses, neighborhood = incidentneighborhood) %>% 
   select(lng = x, lat = y, incident_date = incidenttime,
          description = offenses) %>% 
   mutate(
@@ -163,10 +147,7 @@ res <- raw_pitt_old %>%
         coords = c("lng", "lat")
         ,crs = "+init=EPSG:4326"
       )
-    
   )
-
-# hist(res$incident_date[res$city == "Pittsburgh"], breaks = 30)
 
 raw_pitt_old <- NULL 
 raw_pitt_new <- NULL
@@ -177,37 +158,22 @@ pitt_neighborhoods_sf <- geojson_sf("C:/Users/Matt_2/Downloads/Neighborhoods_wit
 pitt_neighborhoods_sf <- pitt_neighborhoods_sf %>% 
   select(neighborhood = Neighborhood_2010_HOOD)
 
-tmp <- incidents_in_neighborhood(pitt_neighborhoods_sf, res) %>% 
-  clean_names()
+tmp <- incidents_in_neighborhood(pitt_neighborhoods_sf, res)
 
-tmp$geometry <- NULL
-tmp <- tmp %>% 
-  gather("incident_year", "count", -neighborhood) %>% 
-  mutate(
-    incident_year = case_when(
-      grepl( "2012", incident_year) ~ 2012
-      ,grepl("2013", incident_year) ~ 2013
-      ,grepl("2017", incident_year) ~ 2017
-      ,grepl("2018", incident_year) ~ 2018
-    )
-  )
-
-x <- pitt_neighborhoods_sf %>% 
-  left_join(tmp, by = "neighborhood")
-```
-
-
-```{r}
-pal <- RColorBrewer::brewer.pal(5, "Greens")
-ggplot(x) +
+pitt_neighborhoods_sf %>% 
+  left_join(tmp, by = "neighborhood") %>% 
+  filter(type == "all") %>% 
+ggplot() +
   geom_sf(aes(fill = count)) +
-  facet_wrap(~incident_year) +
+  facet_grid(~incident_year) +
   scale_fill_gradient(low = pal[1], high = pal[5]) +
+  coord_sf(datum = NULL) +
+  theme_minimal() +
   NULL
 ```
 
 ```{r}
-saveRDS(x, "data/pitt_neighborhood_incident_count.RDS")
+saveRDS(tmp, "data/pitt_neighborhood_incident_count.RDS")
 ```
 
 ## West
@@ -255,28 +221,15 @@ la_neighborhoods_sf <- geojson_sf("C:/Users/Matt_2/Downloads/Neighborhoods.geojs
 la_neighborhoods_sf <- la_neighborhoods_sf %>% 
   select(neighborhood = name)
 
-tmp <- incidents_in_neighborhood(la_neighborhoods_sf, res) %>% 
-  clean_names()
-
-tmp$geometry <- NULL
-tmp <- tmp %>% 
-  gather("incident_year", "count", -neighborhood) %>% 
-  mutate(
-    incident_year = case_when(
-      grepl( "2012", incident_year) ~ 2012
-      ,grepl("2013", incident_year) ~ 2013
-      ,grepl("2017", incident_year) ~ 2017
-      ,grepl("2018", incident_year) ~ 2018
-    )
-  )
-
-x <- la_neighborhoods_sf %>% 
-  left_join(tmp, by = "neighborhood")
+tmp <- incidents_in_neighborhood(la_neighborhoods_sf, res) 
 ```
 
 
 ```{r}
-ggplot(x) +
+la_neighborhoods_sf %>% 
+  left_join(tmp, by = "neighborhood") %>% 
+  filter(type == "all") %>% 
+ggplot() +
   geom_sf(aes(fill = count)) +
   facet_wrap(~incident_year) +
   scale_fill_gradient(low = pal[1], high = pal[5]) +
@@ -284,7 +237,7 @@ ggplot(x) +
 ```
 
 ```{r}
-saveRDS(x, "data/la_neighborhood_incident_count.RDS")
+saveRDS(tmp, "data/la_neighborhood_incident_count.RDS")
 ```
 
 ```{r San Francisco}
@@ -295,7 +248,7 @@ raw_sf_new <- read_csv(glue("{downloads_path}/Police_Department_Incident_Reports
 raw_sf_new <- clean_names(raw_sf_new)
 
 res <- raw_sf_old %>%
-  select(x, y, incident_date = date, description = descript) %>% 
+  select(x, y, incident_date = date, description = category) %>% 
   mutate(
     incident_date = as.Date(incident_date, format = "%m/%d/%Y"),
     incident_year = as.integer(format(incident_date, "%Y")),
@@ -307,7 +260,7 @@ res <- raw_sf_old %>%
   mattle24utils::drop_na_verbose(x, y) %>% 
   bind_rows(
     raw_sf_new %>%
-      select(x = longitude, y = latitude, incident_date, incident_year, description = incident_description) %>% 
+      select(x = longitude, y = latitude, incident_date, incident_year, description = incident_category) %>% 
       mutate(city = "San Francisco") %>% 
       filter(incident_year == 2018) %>% 
       mattle24utils::filter_verbose(x != 0 & y != 0) %>% 
@@ -329,28 +282,15 @@ sf_neighborhoods_sf <- geojson_sf("C:/Users/Matt_2/Downloads/Analysis Neighborho
 sf_neighborhoods_sf <- sf_neighborhoods_sf %>% 
   select(neighborhood = nhood)
 
-tmp <- incidents_in_neighborhood(sf_neighborhoods_sf, res) %>% 
-  clean_names()
-
-tmp$geometry <- NULL
-tmp <- tmp %>% 
-  gather("incident_year", "count", -neighborhood) %>% 
-  mutate(
-    incident_year = case_when(
-      grepl( "2012", incident_year) ~ 2012
-      ,grepl("2013", incident_year) ~ 2013
-      ,grepl("2017", incident_year) ~ 2017
-      ,grepl("2018", incident_year) ~ 2018
-    )
-  )
-
-x <- sf_neighborhoods_sf %>% 
-  left_join(tmp, by = "neighborhood")
+tmp <- incidents_in_neighborhood(sf_neighborhoods_sf, res)
 ```
 
 
 ```{r}
-ggplot(x) +
+sf_neighborhoods_sf %>% 
+  left_join(tmp, by = "neighborhood") %>% 
+  filter(type == "all") %>% 
+ggplot() +
   geom_sf(aes(fill = count)) +
   facet_wrap(~incident_year) +
   scale_fill_gradient(low = pal[1], high = pal[5]) +
@@ -358,5 +298,5 @@ ggplot(x) +
 ```
 
 ```{r}
-saveRDS(x, "data/sf_neighborhood_incident_count.RDS")
+saveRDS(tmp, "data/sf_neighborhood_incident_count.RDS")
 ```

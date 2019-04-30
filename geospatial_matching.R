@@ -46,17 +46,52 @@ sub_geometry_to_neighborhood <- function(neighborhoods_sf, state_tracts_sf) {
 #' Match points to neighborhoods in a city
 #' @param neighborhoods_sf The `sf` object with neighborhoods
 #' @param points_sf The `sf` object with points
-#' @return A tidy neighborhoods_sf with one row per neighborhood per year with
-#'   columns for number of points in neighborhood per year
-incidents_in_neighborhood <- function(neighborhoods_sf, points_sf) {
+#' @param type What kind of points to get. "all", "violent", "disorderly", or
+#'   custom regex
+#' @return A tidy `tibble` with one row per neighborhood per year with
+#'   columns for number of points of certain type in neighborhood per year
+incidents_in_neighborhood <- function(neighborhoods_sf, points_sf, type = "all") {
+  disorderly_crimes_regex = "g"
+  violent_crimes_regex <- "(assault)|(arson)|(homicide)|(robbery)|(rape)|(battery)|(abuse)|(shots fired)|(sex offenses, forcible)"
   
-  years <- unique(points_sf$incident_year)
+  # TODO: handle different types
+  res <- tibble::tibble()
+
+  covers_matrix <- sf::st_contains(neighborhoods_sf, points_sf, sparse = FALSE)
+  points_sf$geometry <- NULL
   
-  for (y in years) {
-    # one row for each neighborhood, one col for each point
-    covers_matrix <- st_contains(neighborhoods_sf, points_sf %>% filter(incident_year == y), sparse = FALSE)
-    neighborhoods_sf[ ,as.character(y)] <- rowSums(covers_matrix)
+  neighborhoods_vector <- neighborhoods_sf$neighborhood
+  for (i in 1:length(neighborhoods_vector)) {
+    # all 
+    res <- res %>% 
+      dplyr::bind_rows(
+        points_sf[covers_matrix[i, ], ]  %>% # all points in ith neighborhood 
+          dplyr::group_by(incident_year) %>% 
+          dplyr::count() %>%
+          dplyr::mutate(type = "all", neighborhood =  neighborhoods_vector[i])
+      )
+    
+    # violent 
+    res <- res %>% 
+      dplyr::bind_rows(
+        points_sf[covers_matrix[i, ], ]  %>% # all points in ith neighborhood 
+          dplyr::filter(grepl(violent_crimes_regex, description, ignore.case = TRUE)) %>% 
+          dplyr::group_by(incident_year) %>% 
+          dplyr::count() %>% 
+          dplyr::mutate(type = "violent", neighborhood =  neighborhoods_vector[i])
+      )
+    
+    # disorderly 
+    res <- res %>% 
+      dplyr::bind_rows(
+        points_sf[covers_matrix[i, ], ]  %>% # all points in ith neighborhood 
+          dplyr::filter(grepl(disorderly_crimes_regex, description, ignore.case = TRUE)) %>% 
+          dplyr::group_by(incident_year) %>% 
+          dplyr::count() %>% 
+          dplyr::mutate(type = "disorderly", neighborhood =  neighborhoods_vector[i])
+      )
   }
-  
-  return(neighborhoods_sf)
+    
+  res %>% 
+    dplyr::rename(count = n)
 }
