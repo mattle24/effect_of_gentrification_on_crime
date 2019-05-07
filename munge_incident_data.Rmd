@@ -42,23 +42,21 @@ source("geospatial_matching.R")
 
 
 ```{r}
+pal <- RColorBrewer::brewer.pal(5, "Greens")
 yrs_of_interest <- tibble(incident_year = c(2012L, 2013L, 2017L, 2018L))
+downloads_path <- "C:/Users/Matt_2/Downloads"
 ```
 
 # Read and Munge Data
 
-```{r}
-downloads_path <- "C:/Users/Matt_2/Downloads"
-```
-
-## Northeast
+## Philadelphia
 
 ```{r Philadelphia}
 # https://www.opendataphilly.org/dataset/crime-incidents
-raw_philly <- read_csv("C:/Users/Matt_2/Downloads/incidents_part1_part2.csv")
+raw_philly <- read_csv(glue("{downloads_path}/incidents_part1_part2.csv"))
 raw_philly <- clean_names(raw_philly)
 
-res <- raw_philly %>% 
+clean_philly <- raw_philly %>% 
   select(lng = point_x, lat = point_y, incident_date = dispatch_date,
          description = text_general_code) %>% 
   mutate(
@@ -74,8 +72,7 @@ res <- raw_philly %>%
     ,crs = "+init=EPSG:4326"
   )
 
-
-raw_philly <- NULL # rm to free memory
+rm(raw_philly) # rm to free memory
 ```
 
 Match to neighborhood
@@ -86,26 +83,23 @@ philly_neighborhoods_sf <- philly_neighborhoods_sf %>%
   select(neighborhood = NAME) %>% 
   st_transform(crs = 4326)
 
-tmp <- incidents_in_neighborhood(philly_neighborhoods_sf, res) 
+philly_neighborhoods_incidents <- incidents_in_neighborhood(philly_neighborhoods_sf, clean_philly) 
 ```
 
-
 ```{r plot philly}
-pal <- RColorBrewer::brewer.pal(5, "Greens")
-
 philly_neighborhoods_sf %>% 
-  left_join(tmp, by = "neighborhood") %>% 
+  left_join(philly_neighborhoods_incidents, by = "neighborhood") %>% 
   filter(type == "all") %>% 
 ggplot() +
   geom_sf(aes(fill = count)) +
   facet_wrap(~incident_year) +
-  scale_fill_gradient(low = pal[1], high = pal[5]) +
+  scale_fill_gradient(low = pal[1], high = pal[5], name = "Incident Count") +
   coord_sf(datum = NA) +
   NULL
 ```
 
 ```{r save philly}
-saveRDS(tmp, "data/philly_neighborhood_incident_count.RDS")
+saveRDS(philly_neighborhoods_incidents, "data/philly_neighborhood_incident_count.RDS")
 ```
 
 
@@ -116,7 +110,7 @@ raw_pitt_old <- clean_names(raw_pitt_old)
 raw_pitt_new <- read_csv("C:/Users/Matt_2/Downloads/044f2016-1dfd-4ab0-bc1e-065da05fca2e.csv")
 raw_pitt_new <- clean_names(raw_pitt_new)
 
-res <- raw_pitt_old %>% 
+clean_pitt <- raw_pitt_old %>% 
   select(lng = x, lat = y, incident_date = incidenttime,
          description = offenses) %>% 
   mutate(
@@ -149,8 +143,8 @@ res <- raw_pitt_old %>%
       )
   )
 
-raw_pitt_old <- NULL 
-raw_pitt_new <- NULL
+rm(raw_pitt_old)
+rm(raw_pitt_new)
 ```
 
 ```{r}
@@ -158,10 +152,10 @@ pitt_neighborhoods_sf <- geojson_sf("C:/Users/Matt_2/Downloads/Neighborhoods_wit
 pitt_neighborhoods_sf <- pitt_neighborhoods_sf %>% 
   select(neighborhood = Neighborhood_2010_HOOD)
 
-tmp <- incidents_in_neighborhood(pitt_neighborhoods_sf, res)
+pitt_neighborhoods_incidents <- incidents_in_neighborhood(pitt_neighborhoods_sf, clean_pitt)
 
 pitt_neighborhoods_sf %>% 
-  left_join(tmp, by = "neighborhood") %>% 
+  left_join(pitt_neighborhoods_incidents, by = "neighborhood") %>% 
   filter(type == "all") %>% 
 ggplot() +
   geom_sf(aes(fill = count)) +
@@ -173,7 +167,7 @@ ggplot() +
 ```
 
 ```{r}
-saveRDS(tmp, "data/pitt_neighborhood_incident_count.RDS")
+saveRDS(pitt_neighborhoods_incidents, "data/pitt_neighborhood_incident_count.RDS")
 ```
 
 ## West
@@ -182,7 +176,7 @@ saveRDS(tmp, "data/pitt_neighborhood_incident_count.RDS")
 raw_la <- read_csv("C:/Users/Matt_2/Downloads/Crime_Data_from_2010_to_Present.csv")
 raw_la <- clean_names(raw_la)
 
-res <- raw_la %>% 
+clean_la <- raw_la %>% 
   select(incident_date = date_occurred, description = crime_code_description, location) %>% 
   mutate(incident_date = as.Date(incident_date, format = "%m/%d/%Y"),
          incident_year = as.integer(format(incident_date, "%Y")),
@@ -212,22 +206,21 @@ res <- raw_la %>%
   select(-location) %>% 
   identity()
 
-raw_la <- NULL
+rm(raw_la)
 ```
-
 
 ```{r}
 la_neighborhoods_sf <- geojson_sf("C:/Users/Matt_2/Downloads/Neighborhoods.geojson")
 la_neighborhoods_sf <- la_neighborhoods_sf %>% 
   select(neighborhood = name)
 
-tmp <- incidents_in_neighborhood(la_neighborhoods_sf, res) 
+la_neighborhoods_incidents <- incidents_in_neighborhood(la_neighborhoods_sf, clean_la) 
 ```
 
 
 ```{r}
 la_neighborhoods_sf %>% 
-  left_join(tmp, by = "neighborhood") %>% 
+  left_join(la_neighborhoods_incidents, by = "neighborhood") %>% 
   filter(type == "all") %>% 
 ggplot() +
   geom_sf(aes(fill = count)) +
@@ -237,7 +230,7 @@ ggplot() +
 ```
 
 ```{r}
-saveRDS(tmp, "data/la_neighborhood_incident_count.RDS")
+saveRDS(la_neighborhoods_incidents, "data/la_neighborhood_incident_count.RDS")
 ```
 
 ```{r San Francisco}
@@ -247,7 +240,7 @@ raw_sf_old <- clean_names(raw_sf_old)
 raw_sf_new <- read_csv(glue("{downloads_path}/Police_Department_Incident_Reports__2018_to_Present.csv"))
 raw_sf_new <- clean_names(raw_sf_new)
 
-res <- raw_sf_old %>%
+clean_sf <- raw_sf_old %>%
   select(x, y, incident_date = date, description = category) %>% 
   mutate(
     incident_date = as.Date(incident_date, format = "%m/%d/%Y"),
@@ -271,24 +264,22 @@ res <- raw_sf_old %>%
     ,crs = "+init=EPSG:4326"
   ) 
 
-raw_sf_old <- NULL
-raw_sf_new <- NULL
+rm(raw_sf_old)
+rm(raw_sf_new)
 ```
-
-
 
 ```{r}
 sf_neighborhoods_sf <- geojson_sf("C:/Users/Matt_2/Downloads/Analysis Neighborhoods.geojson")
 sf_neighborhoods_sf <- sf_neighborhoods_sf %>% 
   select(neighborhood = nhood)
 
-tmp <- incidents_in_neighborhood(sf_neighborhoods_sf, res)
+sf_neighorhoods_incidents <- incidents_in_neighborhood(sf_neighborhoods_sf, clean_sf)
 ```
 
 
 ```{r}
 sf_neighborhoods_sf %>% 
-  left_join(tmp, by = "neighborhood") %>% 
+  left_join(sf_neighorhoods_incidents, by = "neighborhood") %>% 
   filter(type == "all") %>% 
 ggplot() +
   geom_sf(aes(fill = count)) +
@@ -298,5 +289,5 @@ ggplot() +
 ```
 
 ```{r}
-saveRDS(tmp, "data/sf_neighborhood_incident_count.RDS")
+saveRDS(sf_neighorhoods_incidents, "data/sf_neighborhood_incident_count.RDS")
 ```

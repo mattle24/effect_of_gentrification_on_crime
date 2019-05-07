@@ -10,6 +10,7 @@ output:
     toc: true
     toc_depth: 3
     toc_float: true
+    df_print: kable
 ---
 
 # Purpose
@@ -26,9 +27,7 @@ for median house value. The Census estimated median house value decreased in man
 # Packages and Setup
 
 ```{r}
-knitr::opts_chunk$set(
-  message = FALSE
-)
+knitr::opts_chunk$set(message = FALSE, dpi = 300)
 ```
 
 ```{r packages, echo=FALSE, warning=FALSE, message=FALSE}
@@ -45,6 +44,8 @@ library(ggplot2)
 ```{r}
 source("geospatial_matching.R")
 source("calculate_gentrification.R")
+source("ggplot2_settings.R")
+source("plotting_functions.R")
 ```
 
 # Read and Munge Data
@@ -361,98 +362,27 @@ philly_neighborhood_gentrification <- calculate_gentrification(philly_block_grps
                                                              "Philadelphia")
 ```
 
-```{r}
-pal <- RColorBrewer::brewer.pal(3, "Greens")
-pitt_neighborhoods_sf %>% 
-  left_join(pitt_neighborhood_gentrification, by = "neighborhood") %>% 
-  filter(year != "2000") %>% 
-  mutate(
-    gentrifying = case_when(
-      gentrifying ~ "Gentrifying"
-      ,!gentrifiable ~ "Gentrified/ Wealthy"
-      ,gentrifiable & !gentrifying ~ "Disadvantaged"
-      ,TRUE ~ NA_character_
-    ) %>% 
-      factor(levels = c("Disadvantaged", "Gentrifying", "Gentrified/ Wealthy"))
-  ) %>% 
-ggplot() +
-  geom_sf(aes(fill = gentrifying)) +
-  facet_grid(~year) +
-  scale_fill_manual(values = c("Gentrifying" = pal[3],
-                               "Gentrified/ Wealthy" = "purple",
-                               "Disadvantaged" = pal[2]), na.value = "black")
-```
+# Plotting Gentrification
+```{r Plot Gentrification Geographic}
+plot_neighborhoods_gentrification(pitt_neighborhoods_sf,
+                                  pitt_neighborhood_gentrification,
+                                  "Pittsburgh")
 
-```{r}
-philly_neighborhoods_sf %>% 
-  left_join(philly_neighborhood_gentrification, by = "neighborhood") %>% 
-  filter(year != "2000") %>% 
-  mutate(
-    gentrifying = case_when(
-      gentrifying ~ "Gentrifying"
-      ,!gentrifiable ~ "Gentrified/ Wealthy"
-      ,gentrifiable & !gentrifying ~ "Disadvantaged"
-      ,TRUE ~ NA_character_
-    ) %>% 
-      factor(levels = c("Disadvantaged", "Gentrifying", "Gentrified/ Wealthy"))
-  ) %>% 
-ggplot() +
-  geom_sf(aes(fill = gentrifying)) +
-  facet_grid(~year) +
-  scale_fill_manual(values = c("Gentrifying" = pal[3],
-                               "Gentrified/ Wealthy" = "purple",
-                               "Disadvantaged" = pal[2]), na.value = "black")
+plot_neighborhoods_gentrification(philly_neighborhoods_sf,
+                                  philly_neighborhood_gentrification,
+                                  "Philadelphia")
 
-```
+plot_neighborhoods_gentrification(la_neighborhoods_sf,
+                                  la_neighborhood_gentrification,
+                                  "Los Angeles")
 
-
-```{r}
-la_neighborhoods_sf %>% 
-  left_join(la_neighborhood_gentrification, by = "neighborhood") %>% 
-  filter(year != "2000") %>% 
-  mutate(
-    gentrifying = case_when(
-      gentrifying ~ "Gentrifying"
-      ,!gentrifiable ~ "Gentrified/ Wealthy"
-      ,gentrifiable & !gentrifying ~ "Disadvantaged"
-      ,TRUE ~ NA_character_
-    ) %>% 
-      factor(levels = c("Disadvantaged", "Gentrifying", "Gentrified/ Wealthy"))
-  ) %>% 
-ggplot() +
-  geom_sf(aes(fill = gentrifying)) +
-  facet_grid(~year) +
-  scale_fill_manual(values = c("Gentrifying" = pal[3],
-                               "Gentrified/ Wealthy" = "purple",
-                               "Disadvantaged" = pal[2]), na.value = "black")
+plot_neighborhoods_gentrification(sf_neighborhoods_sf,
+                                  sf_neighborhood_gentrification,
+                                  "San Francisco")
 
 ```
 
 ```{r}
-sf_neighborhoods_sf %>% 
-  left_join(sf_neighborhood_gentrification, by = "neighborhood") %>% 
-  filter(year != "2000") %>% 
-  mutate(
-    gentrifying = case_when(
-      gentrifying ~ "Gentrifying"
-      ,!gentrifiable ~ "Gentrified/ Wealthy"
-      ,gentrifiable & !gentrifying ~ "Disadvantaged"
-      ,TRUE ~ NA_character_
-    ) %>% 
-      factor(levels = c("Disadvantaged", "Gentrifying", "Gentrified/ Wealthy"))
-  ) %>% 
-ggplot() +
-  geom_sf(aes(fill = gentrifying)) +
-  facet_grid(~year) +
-  scale_fill_manual(values = c("Gentrifying" = pal[3],
-                               "Gentrified/ Wealthy" = "purple",
-                               "Disadvantaged" = pal[2]), na.value = "black")
-
-```
-
-# Prepping for Model
-
-```{r, eval=FALSE}
 tmp <- philly_neighborhood_gentrification %>% 
   bind_rows(pitt_neighborhood_gentrification) %>% 
   bind_rows(la_neighborhood_gentrification) %>% 
@@ -470,9 +400,7 @@ tmp <- philly_neighborhood_gentrification %>%
   ) %>% 
   ungroup() %>% 
   filter(year != "2000"
-         ,!is.na(gentrifying)
-         ,gentrifiable
-        ) %>% 
+         ,!is.na(gentrifying)) %>% 
   select(city, neighborhood, year, gentrifiable, gentrifying)
 
 tmp %>% 
@@ -482,11 +410,18 @@ tmp %>%
     ,gentrifying = sum(gentrifying)
     ,pct_gentrifying =gentrifying / neighborhoods
   ) %>% 
-ggplot(aes(x = year, y = pct_gentrifying, color = city)) + 
-  geom_jitter(width = 0.25, height = 0, size = 5) +
+ggplot(aes(x = year, y = pct_gentrifying, fill = city, group = city)) + 
+  geom_col(position = "dodge", color = "black") +
   scale_y_continuous(labels = scales::percent) +
-  scale_color_brewer(type = "qual", palette = "Dark2") 
+  scale_fill_manual(name = "City", values = c("gray1", "gray33", "gray66", "gray99")) +
+  labs(
+    title = "Gentrification 2008-2012 and 2013-2017"
+    ,y = "Percent of Neighborhoods Gentrifying"
+    ,x = "Year"
+  )
 ```
+
+# Save Data for Model
 
 ```{r}
 philly_neighborhood_gentrification %>% 

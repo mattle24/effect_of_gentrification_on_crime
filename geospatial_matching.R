@@ -51,9 +51,8 @@ sub_geometry_to_neighborhood <- function(neighborhoods_sf, state_tracts_sf) {
 #' @return A tidy `tibble` with one row per neighborhood per year with
 #'   columns for number of points of certain type in neighborhood per year
 incidents_in_neighborhood <- function(neighborhoods_sf, points_sf, type = "all") {
-  disorderly_crimes_regex = "g"
   violent_crimes_regex <- "(assault)|(arson)|(homicide)|(robbery)|(rape)|(battery)|(abuse)|(shots fired)|(sex offenses, forcible)"
-  
+  disorderly_crimes_regex <- "(disorderly conduct)|(public drunkenness)|(vagrancy)|(loitering)|(disturbing the peace)|(civil sidewalks)"
   # TODO: handle different types
   res <- tibble::tibble()
 
