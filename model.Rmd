@@ -10,27 +10,26 @@ output:
     toc: true
     toc_depth: 3
     toc_float: true
+    df_print: kable
 ---
 
 # Packages and Setup
 ```{r}
-knitr::opts_chunk$set(dpi=1000,dev="bmp")
+knitr::opts_chunk$set(dpi=300)
 ```
 
 ```{r}
 library(rstan)
 library(dplyr)
 library(sf)
-library(ggthemes)
+library(broom)
 library(ggplot2)
 ```
 
 
 ```{r}
-theme_set(
-  ggthemes::theme_tufte() +
-    theme(panel.border = element_rect(color = "black", fill = NA))
-)
+source("ggplot2_settings.R")
+source("munge_data_for_stan.R")
 ```
 
 
@@ -62,127 +61,111 @@ neighborhood_gentrification <- neighborhood_gentrification %>%
 
 Matching gentrification to incident data. 
 
-```{r join data}
-xl <- la_neighborhood_incident_count %>% 
+```{r look at incident trends}
+plot_df <- la_neighborhood_incident_count %>% 
   rbind(philly_neighborhood_incident_count) %>% 
   rbind(pitt_neighborhood_incident_count) %>% 
-  rbind(sf_neighborhood_incident_count)
+  rbind(sf_neighborhood_incident_count) %>% 
+  mutate(type = paste0(toupper(substring(type, 1, 1)), substring(type, 2)))
 
-xl$geometry <- NULL
+ggplot(plot_df, aes(x = incident_year, y = count, group = neighborhood)) +
+  geom_line(alpha = 0.1) +
+  geom_point(alpha = 0.1) +
+  facet_grid(type~city, scales = "free_y") +
+  scale_y_continuous(labels = scales::comma) +
+  scale_x_continuous(breaks = c(2012, 2013, 2017, 2018)) +
+  labs(
+    "Crime Incidents"
+    ,y = "Count per neighborhood"
+    ,x = "Year"
+  ) +
+  theme(axis.text.x = element_text(angle = 270))
+```
 
-ggplot(xl, aes(x = incident_year, y = count, group = neighborhood)) +
-  geom_point() +
-  geom_line() +
-  facet_wrap(~city)
-# format incident data
-data <- la_neighborhood_incident_count %>% 
-  bind_rows(philly_neighborhood_incident_count) %>% 
-  bind_rows(pitt_neighborhood_incident_count) %>% 
-  bind_rows(sf_neighborhood_incident_count) %>% 
-  group_by(city, neighborhood) %>% 
-  mutate(count_next = lead(count, order_by = incident_year)) %>%
-  filter(incident_year == 2012 | incident_year == 2017) %>%
-  ungroup() %>% 
-  inner_join(neighborhood_gentrification, by = c("city" = "city",
-                                                 "neighborhood" = "neighborhood",
-                                                 "incident_year" = "year")) %>% 
-  group_by(city, neighborhood) %>% 
-  mutate(
-    rate = 1000 * count / total_pop # rate x 1k
-    ,rate_next = 1000 * count_next / total_pop
-    ,pct_change = (count_next - count) / count
-  ) %>% 
-  ungroup()
-  
-# remove geometry
-data$geometry <- NULL
-
-# prep for modeling
-data <- data %>%  
-  filter(gentrifiable_prior) %>% 
-  mutate_at(vars(city, incident_year, gentrifiable, gentrifying), as.factor) %>% 
-  # mutate_at(vars(rate, rate_next), log) %>% 
-  # rename_at(vars(rate, rate_next), ~paste0(., "_log")) %>% 
-  filter(complete.cases(.)) %>% 
-  identity()
-
-
-ggplot(data, aes(x = pct_change)) +
-  geom_density(aes(fill = city, group = city), alpha = 0.4)
-
-# ggplot(data, aes(x = rate_next_log)) +
-#   geom_density(aes(fill = city, group = city), alpha = 0.4)
-# 
-# ggplot(data, aes(x = rate_log)) +
-#   geom_density(aes(fill = city, group = city), alpha = 0.4)
-
-# X <- model.matrix(rate_next_log ~ rate_log + city + incident_year + gentrifying, data)
-X <- model.matrix(pct_change ~ city + incident_year + gentrifying, data)
-lm <- lm(pct_change ~ city + incident_year + gentrifying, data)
-summary(lm)
-
-stan_dat <- list(
-  N = nrow(X)
-  ,y = data$pct_change
-  ,K = ncol(X)
-  ,pos = grep("gentrifying", colnames(X))
-  ,X = X
-)
+```{r}
+stan_dat_all <- munge_data_for_stan(type = "all")
+stan_dat_violent <- munge_data_for_stan(type = "violent")
+stan_dat_disorderly <- munge_data_for_stan(type = "disorderly")
 ```
 
 # Modeling!
+
 ```{r}
-fit <- stan(file = "model.stan", data = stan_dat, )
+fit_all <- stan(file = "model.stan", data = stan_dat_all)
+fit_violent <- stan(file = "model.stan", data = stan_dat_violent)
+fit_disorderly <- stan(file = "model.stan", data = stan_dat_disorderly)
 ```
 
 ```{r}
-library(broom)
-pos <- grep("gentrifying", colnames(X))
-param_sampled <- as_tibble(as.vector(as.matrix(fit)[ ,pos]))
+fit_list <- list(fit_all, fit_violent, fit_disorderly)
+```
 
-greens <- RColorBrewer::brewer.pal(5, "Greens")
-ggplot(param_sampled, aes(x = value, y = 1, fill=0.5 - abs(0.5-..ecdf..))) +
-  stat_density_ridges(geom = "density_ridges_gradient", calc_ecdf = TRUE) +
-  scale_fill_viridis_c(name = "Probability", direction = -1, breaks = c(0, 0.2, .4)) +
+```{r}
+for (fit in fit_list) {
+  tidy(fit) %>% 
+    mutate(term = c(colnames(stan_dat_all$X), "sigma")) %>% 
+    print()
+}
+```
+
+```{r}
+library(ggridges)
+all_params <- tibble()
+
+for (i in 1:3) {
+  all_params <- all_params %>% 
+    bind_rows(
+      param_sampled <- rstan::extract(fit_list[[i]])$beta[ ,stan_dat_all$pos] %>% 
+        as_tibble() %>% 
+        rename(gentrifying_pacific = V1, gentrifying_north_atlantic = V2) %>% 
+        mutate(gentrifying_north_atlantic = gentrifying_north_atlantic + gentrifying_pacific) %>% 
+        tidyr::gather() %>% 
+        mutate(
+          label = ifelse(key == "gentrifying_pacific", "Gentrifying (Pacific)", "Gentrifying (North Atlantic)")
+        )
+    )
+}
+
+all_params <- all_params %>% 
+  mutate(type = case_when(
+    row_number() <= 8000 ~ "All"
+    ,row_number() <= 16000 ~ "Violent"
+    ,TRUE ~ "Disorderly"
+  ))
+
+ggplot(all_params, aes(x = value, y = label)) +
+  stat_density_ridges(geom = "density_ridges_gradient", fill = "gray85") +
   labs(
     title = "Estimated Effect of Gentrification on Crime Incidents"
-    ,x = "Percent Change in Incident Rate per 1K people in neighborhood"
-    ,y = "Density"
+    ,x = "Change in Log Count of Incidents"
+    ,y = ""
   ) +
-  scale_y_continuous(labels = NULL) +
-  scale_x_continuous(labels = scales::percent) +
-  mattle24utils::theme_mattle24() +
-  NULL
- 
-# sum(param_sampled$value < 0) / length(param_sampled$value)
-# sum(param_sampled$value > 0) / length(param_sampled$value)
-
-fit_broom <- fit %>%
-  tidy(conf.int = TRUE, conf.level = 0.95, conf.method = "quantile") %>% 
-  mutate(
-    term = c(colnames(X), "sigma")
-  ) 
-
-fit_broom
-
-ggplot(fit_broom[-c(1, 12), ], aes(x = term, y = estimate)) +
-  #geom_vline(xintercept = 0, color = "gray68", size = 3)+
-  geom_linerange(aes(ymin = conf.low, ymax = conf.high), size = 3,
-                 alpha = .6, color = "gold") +
-  geom_point(size = 3) +
-  labs(
-    y = "Estimate (log incidents per 1K)"
-    ,caption = "Bars represent 95% credible interval"
-  ) +
-  coord_flip() +
+  geom_vline(xintercept = 0, linetype = 2) +
+  facet_wrap(~type, scales = "free_x") +
+  theme(axis.line = element_blank()) +
   NULL
 
-# plot(fit)
-# stan_dens(fit, pars = "beta[8]")
-# stan_trace(fit)
+all_params %>% 
+  group_by(label, type) %>% 
+  summarise(mn = round(mean(value), 3)
+            ,prob_greater_0 = sum(value > 0) / n()
+            ,prob_less_0 = sum(value < 0) / n()) %>% 
+  ungroup() %>% 
+  mutate_at(vars(prob_greater_0, prob_less_0), scales::percent) %>% 
+  arrange(type, label) %>% 
+  print() 
+
 ```
 
-```{r}
 
-```
+
+
+
+
+
+
+
+
+
+
 
